@@ -1,0 +1,13 @@
+.venv/
+.env
+__pycache__/
+*.pyc
+
+# State runtime LangGraph. Pola lama ".langgraph/" tidak pernah cocok dengan
+# direktori sebenarnya, sehingga file pickle ikut ter-commit.
+.langgraph/
+.langgraph_api/
+*.pckl
+
+.pytest_cache/
+.ruff_cache/

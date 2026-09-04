@@ -1,0 +1,279 @@
+# Korpus regresi tools_rates.
+#
+# Menambah kasus tidak perlu menulis kode. Salin chat asli dari WhatsApp,
+# isi slot seperti yang seharusnya diisi LLM, lalu tulis hasil yang benar.
+#
+#   id     penanda bebas, dipakai sebagai nama tes
+#   chat   kalimat asli user, untuk dokumentasi
+#   slots  argumen tools_rates: origin, destinasi, customer, expedisi, truck_type
+#   harap  yang wajib benar: status, needs, row_id, truck_type
+#
+# Jalankan dengan: uv run pytest -q -m live
+
+cases:
+  - id: A-makmur-multikota
+    chat: "rate Makmur Technology muat Semarang tujuan Tanggerang-Bogor-Bekasi"
+    slots:
+      customer: "Makmur Technology"
+      origin: "Semarang"
+      destinasi: "Tanggerang-Bogor-Bekasi"
+    harap:
+      status: success
+      row_id: 6403
+
+  - id: A-makmur-multikota-koma-dan
+    chat: "LLM sering menulis ulang menjadi Tangerang, Bogor, dan Bekasi"
+    slots:
+      customer: "Makmur Technology"
+      origin: "Semarang"
+      destinasi: "Tangerang, Bogor, dan Bekasi"
+    harap:
+      status: success
+      row_id: 6403
+
+  - id: B-makmur-jogja-smg
+    chat: "rate Makmur Technology muat jogja tujuan smg"
+    slots:
+      customer: "Makmur Technology"
+      origin: "jogja"
+      destinasi: "smg"
+    harap:
+      status: success
+      row_id: 4726
+
+  - id: B-makmur-typo-technologi
+    chat: "typo Technologi, bukan Technology"
+    slots:
+      customer: "Makmur Technologi"
+      origin: "jogja"
+      destinasi: "smg"
+    harap:
+      status: success
+      row_id: 4726
+
+  - id: C-liebra-oocl-wonogri-jakarta2
+    chat: "rate oocl pt liebra permna muat wonogri tujuan jakarta 2"
+    slots:
+      expedisi: "oocl"
+      customer: "Pt liebra permna"
+      origin: "wonogri"
+      destinasi: "jakarta 2"
+    harap:
+      status: success
+      row_id: 8004
+
+  - id: D-rute-tanpa-mitra
+    chat: "rate semarang ke cgk dan tgrg berapa"
+    slots:
+      origin: "semarang"
+      destinasi: "cgk dan tgrg"
+    harap:
+      status: needs_clarification
+      needs: customer_atau_expedisi
+
+  - id: E-sby-gringsing-tanpa-mitra
+    chat: "sby ke gringsing berapa"
+    slots:
+      origin: "sby"
+      destinasi: "gringsing"
+    harap:
+      status: needs_clarification
+      needs: customer_atau_expedisi
+
+  - id: F-rapi-eds-tangerang2
+    chat: "rate eds rapi jkt muat tangerang 2 titik tujuan semrang"
+    slots:
+      expedisi: "rapi jkt"
+      customer: "eds"
+      origin: "tangerang 2 titik"
+      destinasi: "semrang"
+    harap:
+      status: success
+      row_id: 6396
+
+  - id: F-slot-tertukar
+    chat: "LLM menukar slot, customer=rapi dan expedisi=eds. Hasil harus sama."
+    slots:
+      customer: "rapi"
+      expedisi: "eds"
+      origin: "tangerang 2"
+      destinasi: "semrang"
+    harap:
+      status: success
+      row_id: 6396
+
+  - id: H-mti-jogja2
+    chat: "rate MTI muat semarng tujuan jogja 2"
+    slots:
+      customer: "MTI"
+      origin: "semarng"
+      destinasi: "jogja 2"
+    harap:
+      status: success
+      row_id: 7246
+
+  - id: I-muat-nama-pabrik
+    chat: "Expedisi AST, muat AICA, tujuan Semarang, armada CDD"
+    slots:
+      origin: "AICA"
+      destinasi: "SEMARANG"
+      expedisi: "AST"
+      truck_type: "CDD"
+    harap:
+      status: success
+      destinasi_mengandung: "SMG"
+
+  - id: J-wavin-tronton-bak
+    chat: "rate Wavin Batang Regency ke Kota Semarang, Tronton Bak Terbuka"
+    slots:
+      customer: "Wavin Trading Indonesia"
+      origin: "Batang Regency, Central Java"
+      destinasi: "Kota Semarang, Jawa Tengah"
+      truck_type: "Tronton Bak Terbuka"
+    harap:
+      status: success
+      row_id: 9074
+      truck_type: "TRONTON BAK"
+
+  - id: K-excellence-wing-box
+    chat: "Armada Wing Box, Muat surabaya (pt.excellent), Tujuan Pekalongan, Expedisi Excellent"
+    slots:
+      origin: "surabaya (pt.excellent)"
+      destinasi: "Pekalongan"
+      expedisi: "Excellent"
+      truck_type: "Wing Box"
+    harap:
+      status: success
+      row_id: 10062
+      truck_type: "WB"
+
+  - id: K-nama-noise-diabaikan
+    chat: "Expedisi Excellent, LLM salah mengambil Yuyun dari baris Note"
+    slots:
+      origin: "surabaya"
+      destinasi: "Pekalongan"
+      expedisi: "Excellent"
+      customer: "Yuyun"
+      truck_type: "Wing Box"
+    harap:
+      status: success
+      row_id: 10062
+
+  - id: L-waluyo-typo
+    chat: "rate Pak Waluyo muat jkrta tujuan semrng"
+    slots:
+      customer: "Pak Waluyo"
+      origin: "jkrta"
+      destinasi: "semrng"
+    harap:
+      status: success
+      row_id: 10129
+
+  - id: M-mitra-tidak-dikenal
+    chat: "rate PT Tidak Ada Sama Sekali muat semarang tujuan jakarta"
+    slots:
+      customer: "PT Tidak Ada Sama Sekali"
+      origin: "semarang"
+      destinasi: "jakarta"
+    harap:
+      status: needs_clarification
+      needs: customer_atau_expedisi
+
+  - id: N-mitra-saja-tanya-rute
+    chat: "rate PT AST berapa ya?"
+    slots:
+      customer: "AST"
+    harap:
+      status: needs_clarification
+      needs: origin_atau_destinasi
+
+  - id: O-toi-karawang-kukdong
+    chat: "Armada CDD BOX, Muat TOI KARAWANG, Tujuan SEMARANG, Expedisi KUKDONG"
+    slots:
+      origin: "TOI KARAWANG"
+      destinasi: "SEMARANG"
+      expedisi: "KUKDONG"
+      truck_type: "CDD BOX"
+    harap:
+      status: success
+      row_id: 5345
+      truck_type: "CDD BOX"
+
+  - id: P-att-tjpriok-solo
+    chat: "Armada CDD, Muat TJ.PRIOK, Tujuan SOLO, Expedisi ATT"
+    slots:
+      origin: "TJ.PRIOK"
+      destinasi: "SOLO"
+      expedisi: "ATT"
+      truck_type: "CDD"
+    harap:
+      status: success
+      row_id: 7184
+      truck_type: "CDD BOX"
+
+  - id: Q-liebra-cddl-wonogiri-cakung
+    chat: "PT LIBRA PERMANA, Type: CDDL, Rute: WONOGIRI - CAKUNG, Ket: berangkat to PT OOCL Logistics"
+    slots:
+      customer: "PT LIBRA PERMANA"
+      origin: "WONOGIRI"
+      destinasi: "CAKUNG"
+      expedisi: "OOCL"
+      truck_type: "CDDL"
+    harap:
+      status: success
+      row_id: 7126
+      truck_type: "CDD LONG"
+
+  - id: R-kayubagus-flatbed-smg-sidoarjo
+    chat: "Armada: FLatbed Trailer, Muat: Semarang ( PT.EASTWIND/CV.KAYU BAGUS ), Tujuan: Sidoarjo"
+    slots:
+      origin: "Semarang ( PT.EASTWIND/CV.KAYU BAGUS )"
+      destinasi: "Sidoarjo"
+      truck_type: "FLatbed Trailer"
+    harap:
+      status: success
+      row_id: 10164
+      truck_type: "Flatbed Trailer"
+
+  - id: S-pungkook-widus-f1-wb
+    chat: "Armada: wb, Muat: Grobokan ( PT.Pungkook ), Tujuan: Jakarta, Notes: Laporan masuk dr Ex : WIDUS/F1"
+    slots:
+      origin: "Grobokan ( PT.Pungkook )"
+      destinasi: "Jakarta"
+      expedisi: "WIDUS/F1"
+      truck_type: "wb"
+    harap:
+      status: success
+      destinasi_mengandung: "JKT"
+      truck_type: "WB"
+
+  - id: T-wavin-logwin-marunda-tronton
+    chat: "Armada : TRONTON, Asal Muat : Batang ( PT.Wavin ), Tujuan : Jakarta ( Marunda ), Notes : Laporan muat dari LOGWIN"
+    slots:
+      origin: "Batang ( PT.Wavin )"
+      destinasi: "Jakarta ( Marunda )"
+      expedisi: "LOGWIN"
+      truck_type: "TRONTON"
+    harap:
+      status: success
+      destinasi_mengandung: "JKT"
+      row_id: 8463
+
+  - id: U-oocl-wonogiri-cakung-cddl
+    chat: "Type : CDDL, Rute : WONOGIRI - cakung, Ket : berangkat to PT OOCL Logistics"
+    slots:
+      customer: "PT OOCL Logistics"
+      origin: "WONOGIRI"
+      destinasi: "cakung"
+      truck_type: "CDDL"
+    harap:
+      status: success
+      row_id: 7126
+      truck_type: "CDD LONG"
+
+
+
+
+
+
+
