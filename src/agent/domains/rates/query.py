@@ -51,9 +51,7 @@ def partner_clause(groups: list[list[str]], *, require_all: bool) -> str:
     for group in groups:
         if not group:
             continue
-        clauses.append(
-            f"({in_filter('customer_nama', group)} OR {in_filter('expedisi_nama', group)})"
-        )
+        clauses.append(f"({in_filter('customer_nama', group)} OR {in_filter('expedisi_nama', group)})")
     if not clauses:
         return ""
     if len(clauses) == 1:
@@ -135,7 +133,9 @@ def execute(
     for step in steps:
         outcome.steps_tried.append(step.name)
         result = meili_service.search(
-            cfg.index, filter_expr=step.filter_expr, limit=cfg.search_limit,
+            cfg.index,
+            filter_expr=step.filter_expr,
+            limit=cfg.search_limit,
         )
         if result.hits:
             outcome.hits = result.hits
@@ -146,6 +146,21 @@ def execute(
 
     logger.info("rates: semua langkah kosong (%s)", ", ".join(outcome.steps_tried) or "tidak ada")
     return outcome
+
+
+def _match_cardinality(
+    hits: list[dict[str, Any]],
+    field_name: str,
+    want_multi: bool,
+) -> list[dict[str, Any]]:
+    """Saring hit sesuai kardinalitas sisi rute (single vs multi).
+
+    Simetris untuk origin dan destinasi: rute multi disaring keluar dari
+    pencarian single, dan sebaliknya. Jika kelompok yang diinginkan kosong,
+    semua hit dikembalikan apa adanya (fallback, bukan penyaringan paksa).
+    """
+    preferred = [h for h in hits if ("+" in (h.get(field_name) or "")) == want_multi]
+    return preferred or hits
 
 
 def sort_hits(
@@ -179,29 +194,19 @@ def sort_hits(
             points += 20
         if str(hit.get("status") or "").lower() == "published":
             points += 5
-        return (-points, ho, hd, normalize_upper(hit.get("truck_type")),
-                parse_numeric(hit.get("id")), str(hit.get("id") or ""))
+        return (
+            -points,
+            ho,
+            hd,
+            normalize_upper(hit.get("truck_type")),
+            parse_numeric(hit.get("id")),
+            str(hit.get("id") or ""),
+        )
 
-    filtered = hits
     origin_multi = ("+" in origin_raw) or (len(origin.codes) > 1)
     dest_multi = ("+" in destinasi_raw) or (len(destinasi.codes) > 1)
 
-    if not origin_multi:
-        has_single_o = any("+" not in (h.get("origin") or "") for h in filtered)
-        if has_single_o:
-            filtered = [h for h in filtered if "+" not in (h.get("origin") or "")]
-    else:
-        has_multi_o = any("+" in (h.get("origin") or "") for h in filtered)
-        if has_multi_o:
-            filtered = [h for h in filtered if "+" in (h.get("origin") or "")]
-
-    if dest_multi:
-        has_multi_d = any("+" in (h.get("destinasi") or "") for h in filtered)
-        if has_multi_d:
-            filtered = [h for h in filtered if "+" in (h.get("destinasi") or "")]
-    else:
-        has_single_d = any("+" not in (h.get("destinasi") or "") for h in filtered)
-        if has_single_d:
-            filtered = [h for h in filtered if "+" not in (h.get("destinasi") or "")]
+    filtered = _match_cardinality(hits, "origin", origin_multi)
+    filtered = _match_cardinality(filtered, "destinasi", dest_multi)
 
     return sorted(filtered, key=score)

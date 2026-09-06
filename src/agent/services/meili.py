@@ -17,6 +17,21 @@ MEILI_URL: str = os.getenv("MEILISEARCH_URL", "").rstrip("/")
 MEILI_KEY: str = os.getenv("MEILISEARCH_KEY", "")
 
 
+def _tls_verify() -> bool:
+    """Verifikasi TLS. Default False karena sertifikat server Meilisearch VPS GYNTRANS
+    saat ini belum menyertakan subdomain meilisearch.gyntransrozaqtana.com pada SAN.
+    Bisa diaktifkan dengan HTTP_VERIFY_TLS=true bila sertifikat server sudah diperbarui."""
+    enabled = os.getenv("HTTP_VERIFY_TLS", "false").strip().lower() in {"1", "true", "yes"}
+    if not enabled:
+        try:
+            import urllib3
+
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        except ImportError:
+            pass
+    return enabled
+
+
 @dataclass
 class SearchResult:
     hits: list[dict[str, Any]] = field(default_factory=list)
@@ -38,7 +53,7 @@ def _build_client() -> httpx.Client:
         headers=headers,
         limits=limits,
         timeout=timeout,
-        verify=False,
+        verify=_tls_verify(),
     )
 
 
@@ -67,7 +82,10 @@ class MeilisearchService:
                 if res.status_code >= 400:
                     logger.error(
                         "Meilisearch %s %s -> HTTP %s: %s",
-                        method, path, res.status_code, res.text[:300],
+                        method,
+                        path,
+                        res.status_code,
+                        res.text[:300],
                     )
                     return None
                 return res
@@ -89,6 +107,7 @@ class MeilisearchService:
         attributes_to_search_on: list[str] | None = None,
         filter_expr: str | None = None,
         limit: int = 30,
+        with_ranking_score: bool = False,
     ) -> SearchResult:
         payload: dict[str, Any] = {
             "q": query or "",
@@ -99,6 +118,8 @@ class MeilisearchService:
             payload["attributesToSearchOn"] = attributes_to_search_on
         if filter_expr:
             payload["filter"] = filter_expr
+        if with_ranking_score:
+            payload["showRankingScore"] = True
 
         res = self._request("POST", f"/indexes/{index_name}/search", json=payload)
         if res is None:

@@ -17,6 +17,7 @@ from src.agent.utils.text import (
     STOP_WORDS,
     acronym,
     drop_stop_words,
+    normalize_key,
     normalize_whitespace,
     partner_core_similarity,
     string_similarity,
@@ -29,6 +30,11 @@ _CITY_MIN_SKELETON = 0.80
 _PARTNER_MIN = 0.75
 _PARTNER_BAND = 0.05
 _TRUCK_MIN = 0.80
+
+# Pagar untuk tangga Meilisearch: tanpa ini, hit pertama apa pun diterima
+# mentah dan kata asing bisa terpaut paksa ke kota yang salah.
+_MEILI_MIN_RANKING = 0.5
+_MEILI_MIN_SIMILARITY = 0.5
 
 
 def _city_exact(cat: Catalog, base: str) -> EntityMatch | None:
@@ -54,20 +60,47 @@ def _city_skeleton_nearest(cat: Catalog, base: str) -> EntityMatch | None:
 
 
 def _city_meili(cat: Catalog, base: str) -> EntityMatch | None:
+    probe = normalize_key(base)
+    if not probe or probe in cat.meili_misses:
+        return None
+
     result = meili_service.search(
         cfg.index_lokasi,
         base,
         attributes_to_search_on=["alamat_lengkap", "alamat_tujuan"],
         limit=5,
+        with_ranking_score=True,
     )
     for hit in result.hits:
         candidate, _ = split_trailing_number(normalize_code(hit.get("alamat_tujuan") or ""))
-        if candidate and candidate in cat.cities:
-            return EntityMatch(candidate, "kota_meili", 0.70)
+        if not candidate or candidate not in cat.cities:
+            continue
+        ranking = hit.get("_rankingScore")
+        if ranking is not None:
+            if ranking < _MEILI_MIN_RANKING:
+                continue
+        elif (
+            max(
+                string_similarity(base, str(hit.get("alamat_lengkap") or "")),
+                string_similarity(base, candidate),
+            )
+            < _MEILI_MIN_SIMILARITY
+        ):
+            continue
+        return EntityMatch(candidate, "kota_meili", 0.70)
+
+    # Cache negatif: kata yang sudah pasti gagal tidak ditanyakan lagi ke
+    # Meilisearch selama katalog ini hidup.
+    cat.meili_misses.add(probe)
     return None
 
 
-def resolve_city(segment: str, catalog: Catalog | None = None) -> EntityMatch | None:
+def resolve_city(
+    segment: str,
+    catalog: Catalog | None = None,
+    *,
+    allow_meili: bool = True,
+) -> EntityMatch | None:
     cat = catalog or get_catalog()
     base_raw, number = split_trailing_number(strip_noise(segment))
     base = drop_stop_words(base_raw)
@@ -83,7 +116,7 @@ def resolve_city(segment: str, catalog: Catalog | None = None) -> EntityMatch | 
             or _city_skeleton_exact(cat, base)
             or _city_nearest(cat, base)
             or _city_skeleton_nearest(cat, base)
-            or _city_meili(cat, base)
+            or (_city_meili(cat, base) if allow_meili else None)
         )
 
     if match is None:
@@ -110,6 +143,7 @@ def resolve_route_side(text: str, catalog: Catalog | None = None) -> tuple[Route
     all_leftovers: list[str] = []
 
     for seg in segments:
+        # Meilisearch maksimal satu kali per segmen, tidak per kata.
         match = resolve_city(seg, cat)
         if match:
             resolved_segments.append(match)
@@ -122,7 +156,7 @@ def resolve_route_side(text: str, catalog: Catalog | None = None) -> tuple[Route
             seg_candidates: list[tuple[EntityMatch, str]] = []
             leftover_words: list[str] = []
             for w in words:
-                w_match = resolve_city(w, cat)
+                w_match = resolve_city(w, cat, allow_meili=False)
                 if w_match:
                     seg_candidates.append((w_match, w))
                 elif w.upper() not in STOP_WORDS:
@@ -179,7 +213,7 @@ def resolve_route_side(text: str, catalog: Catalog | None = None) -> tuple[Route
     all_candidates.sort(key=candidate_key, reverse=True)
     best_match, best_seg = all_candidates[0]
     codes = [best_match.value]
-    for m, s in all_candidates[1:]:
+    for _, s in all_candidates[1:]:
         all_leftovers.append(s)
 
     return RouteSide(tuple(codes)), all_leftovers
@@ -242,9 +276,9 @@ def resolve_truck(text: str, catalog: Catalog | None = None) -> list[str]:
             widest = max(len(c.split()) for c in subset)
             return sorted(c for c in subset if len(c.split()) == widest)
 
-        superset = [c for c in cat.trucks.values if tokens <= set(c.split())]
-        if superset:
-            return sorted(superset)[: cfg.max_candidates]
+    superset = [c for c in cat.trucks.values if tokens <= set(c.split())]
+    if superset:
+        return sorted(superset)[: cfg.max_candidates]
 
     found = cat.trucks.nearest(probe, _TRUCK_MIN) or cat.trucks.nearest_skeleton(probe, _TRUCK_MIN)
     return [found[0]] if found else []

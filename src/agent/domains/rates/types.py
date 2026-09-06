@@ -15,9 +15,29 @@ class RatesConfig:
     search_limit: int = 60
     catalog_ttl_seconds: float = 900.0
     catalog_batch_size: int = 1000
+    # Satu-satunya saklar aturan tampil DP & Uang Jalan di blok formatted.
+    include_dp_uang_jalan: bool = True
 
 
 cfg = RatesConfig()
+
+
+# Field yang boleh dibaca LLM (content). Sisanya (rates mentah, resolved)
+# hanya disimpan di artifact state — tidak dikirim ke model, tidak dibayar token.
+_CONTENT_KEYS = (
+    "status",
+    "message",
+    "formatted",
+    "has_more",
+    "needs_clarification",
+    "options",
+)
+
+
+def split_tool_payload(full: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Pisahkan payload tool menjadi (content untuk LLM, artifact untuk state)."""
+    content = {k: full[k] for k in _CONTENT_KEYS if k in full}
+    return content, full
 
 
 @dataclass(frozen=True)
@@ -39,6 +59,10 @@ class PipelineResult:
     options: dict[str, list[str]] = field(default_factory=dict)
     rates: list[dict[str, Any]] = field(default_factory=list)
     matched_step: str = ""
+    # Slot hasil resolusi backend; dibaca node_tools untuk memori lintas turn.
+    resolved: dict[str, Any] = field(default_factory=dict)
+    # Blok jawaban final hasil render deterministik; LLM wajib mengutip persis.
+    formatted: str = ""
 
     def to_tool_dict(self) -> dict[str, Any]:
         return {
@@ -52,4 +76,6 @@ class PipelineResult:
             "options": self.options,
             "rates": self.rates,
             "matched_step": self.matched_step,
+            "resolved": self.resolved,
+            "formatted": self.formatted,
         }

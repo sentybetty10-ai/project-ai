@@ -6,13 +6,22 @@ from dataclasses import dataclass
 from src.agent.utils.text import normalize_whitespace
 
 _NOISE_WORDS = (
-    "titik", "titk", "ttik", "tttik", "ttk",
-    "zona", "zone", "point", "poin", "drop",
+    "titik",
+    "titk",
+    "ttik",
+    "tttik",
+    "ttk",
+    "zona",
+    "zone",
+    "point",
+    "poin",
+    "drop",
 )
 _NOISE_RE = re.compile(r"\b(?:" + "|".join(_NOISE_WORDS) + r")\b", re.IGNORECASE)
 _USER_SPLIT_RE = re.compile(r"\s*(?:\+|,|;|/|\(|\)|\bdan\b|-)\s*", re.IGNORECASE)
 _DB_SPLIT_RE = re.compile(r"\s*\+\s*")
 _TRAILING_NUM_RE = re.compile(r"^(.*?)\s*(\d{1,2})$")
+_URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -57,7 +66,8 @@ def split_trailing_number(code: str) -> tuple[str, str]:
 
 
 def strip_noise(text: str) -> str:
-    return normalize_whitespace(_NOISE_RE.sub(" ", str(text or "")))
+    cleaned = _URL_RE.sub(" ", str(text or ""))
+    return normalize_whitespace(_NOISE_RE.sub(" ", cleaned))
 
 
 def parse_db_side(value: str) -> RouteSide:

@@ -18,15 +18,17 @@ from src.agent.services.meili import meili_service
 from src.agent.utils.text import (
     consonant_skeleton,
     normalize_key,
-    normalize_upper as _up,
     ratio,
     strip_entity_prefix,
     tokenize,
 )
+from src.agent.utils.text import (
+    normalize_upper as _up,
+)
 
 logger = logging.getLogger("gyntrans.domains.rates.catalog")
 
-_RATE_SCAN_FIELDS = ["origin", "destinasi", "customer_nama", "expedisi_nama", "truck_type"]
+_RATE_SCAN_FIELDS = ["origin", "destinasi", "customer_nama", "expedisi_nama", "truck_type", "status"]
 _LOCATION_FIELDS = ["alamat_tujuan", "alamat_lengkap"]
 _FAILED_RETRY_COOLDOWN = 30.0
 
@@ -36,6 +38,7 @@ class LookupTable:
         self._exact: dict[str, str] = {}
         self._cluster: dict[str, set[str]] = defaultdict(set)
         self._skeleton: dict[str, list[str]] = defaultdict(list)
+        self._skeleton_sorted: list[str] | None = None
         self._prefix: dict[str, set[str]] = defaultdict(set)
         self._canonical: set[str] = set()
         self._canonical_sorted: list[str] | None = None
@@ -56,6 +59,7 @@ class LookupTable:
             skeleton = consonant_skeleton(alias)
             if len(skeleton) >= 3 and canonical not in self._skeleton[skeleton]:
                 self._skeleton[skeleton].append(canonical)
+                self._skeleton_sorted = None
             for token in tokenize(alias, exclude_stop_words=False):
                 if len(token) >= 3:
                     self._prefix[token[:3]].add(canonical)
@@ -71,6 +75,13 @@ class LookupTable:
         if self._canonical_sorted is None:
             self._canonical_sorted = sorted(self._canonical)
         return self._canonical_sorted
+
+    @property
+    def skeleton_keys(self) -> list[str]:
+        """Daftar skeleton terurut, di-cache; diinvalidate saat ada tambahan."""
+        if self._skeleton_sorted is None:
+            self._skeleton_sorted = sorted(self._skeleton)
+        return self._skeleton_sorted
 
     def exact(self, text: str) -> str | None:
         return self._exact.get(normalize_key(text))
@@ -114,7 +125,7 @@ class LookupTable:
         if len(probe) < 3:
             return None
         best: tuple[str, float] | None = None
-        for skeleton in sorted(self._skeleton):
+        for skeleton in self.skeleton_keys:
             score = ratio(probe, skeleton)
             if score >= min_score and (best is None or score > best[1]):
                 best = (sorted(self._skeleton[skeleton])[0], score)
@@ -130,6 +141,8 @@ class Catalog:
     route_index: dict[str, list[str]] = field(default_factory=dict)
     route_index_sorted: dict[str, list[str]] = field(default_factory=dict)
     unparsed_routes: list[str] = field(default_factory=list)
+    # Cache negatif kata yang gagal resolve via Meilisearch (matcher).
+    meili_misses: set[str] = field(default_factory=set)
     loaded_at: float = 0.0
     ok: bool = False
 
@@ -188,6 +201,8 @@ def build_catalog(
     truck_names: set[str] = set()
 
     for row in rate_rows:
+        if str(row.get("status") or "").lower() == "archived":
+            continue
         for name in (_up(row.get("customer_nama")), _up(row.get("expedisi_nama"))):
             if name:
                 partner_names.add(name)
@@ -235,7 +250,8 @@ def build_catalog(
     if unparsed:
         logger.warning(
             "Nilai rute tidak bisa di-parse (%d). Contoh: %s",
-            len(unparsed), sorted(unparsed)[:20],
+            len(unparsed),
+            sorted(unparsed)[:20],
         )
 
     return Catalog(
@@ -253,7 +269,9 @@ def build_catalog(
 
 def _load_locations() -> list[dict]:
     docs = meili_service.get_documents(
-        cfg.index_lokasi, fields=_LOCATION_FIELDS, batch_size=cfg.catalog_batch_size,
+        cfg.index_lokasi,
+        fields=_LOCATION_FIELDS,
+        batch_size=cfg.catalog_batch_size,
     )
     if docs:
         return docs
@@ -264,7 +282,9 @@ def _load_locations() -> list[dict]:
 def _fetch_catalog() -> Catalog:
     locations = _load_locations()
     rate_rows = meili_service.get_documents(
-        cfg.index, fields=_RATE_SCAN_FIELDS, batch_size=cfg.catalog_batch_size,
+        cfg.index,
+        fields=_RATE_SCAN_FIELDS,
+        batch_size=cfg.catalog_batch_size,
     )
     synonyms = meili_service.get_synonyms(cfg.index_lokasi)
 
@@ -272,54 +292,75 @@ def _fetch_catalog() -> Catalog:
     if catalog.ok:
         logger.info(
             "Katalog rates dimuat: %d kode kota, %d kunci rute, %d mitra, %d armada",
-            len(catalog.city_codes), len(catalog.route_index),
-            len(catalog.partners), len(catalog.trucks),
+            len(catalog.city_codes),
+            len(catalog.route_index),
+            len(catalog.partners),
+            len(catalog.trucks),
         )
     else:
         logger.error(
             "Katalog rates gagal dimuat (kota=%d, rute=%d)",
-            len(catalog.city_codes), len(catalog.route_index),
+            len(catalog.city_codes),
+            len(catalog.route_index),
         )
     return catalog
 
 
+# Pola stale-while-revalidate: katalog lama (atau gagal) tetap melayani
+# request, rebuild berjalan di background thread. Satu-satunya pemblokiran
+# sinkron adalah pemuatan pertama kali saat proses baru hidup.
 _LOCK = threading.RLock()
 _CATALOG: Catalog | None = None
-_LAST_FAILED_AT: float = 0.0
+_REFRESHING = False
+_RETRY_AFTER = 0.0
+
+
+def _refresh_async() -> None:
+    global _CATALOG, _REFRESHING, _RETRY_AFTER
+    try:
+        built = _fetch_catalog()
+        with _LOCK:
+            if built.ok or _CATALOG is None:
+                _CATALOG = built
+                _RETRY_AFTER = 0.0
+            else:
+                _RETRY_AFTER = time.time() + _FAILED_RETRY_COOLDOWN
+    finally:
+        with _LOCK:
+            _REFRESHING = False
+
+
+def _trigger_refresh() -> None:
+    global _REFRESHING
+    if _REFRESHING or time.time() < _RETRY_AFTER:
+        return
+    _REFRESHING = True
+    threading.Thread(target=_refresh_async, daemon=True).start()
 
 
 def get_catalog(*, force: bool = False) -> Catalog:
-    global _CATALOG, _LAST_FAILED_AT
+    global _CATALOG
     with _LOCK:
-        now = time.time()
-        if not force and _CATALOG is not None:
-            if _LAST_FAILED_AT and (now - _LAST_FAILED_AT) < _FAILED_RETRY_COOLDOWN:
+        if _CATALOG is not None and not force:
+            fresh = _CATALOG.ok and (time.time() - _CATALOG.loaded_at) < cfg.catalog_ttl_seconds
+            if fresh:
                 return _CATALOG
+            _trigger_refresh()
+            return _CATALOG
 
-            age = now - _CATALOG.loaded_at
-            if _CATALOG.ok and age < cfg.catalog_ttl_seconds:
-                return _CATALOG
-            if not _CATALOG.ok and age < _FAILED_RETRY_COOLDOWN:
-                return _CATALOG
-
-        built = _fetch_catalog()
-        if built.ok or _CATALOG is None:
-            _CATALOG = built
-            _LAST_FAILED_AT = 0.0
-        else:
-            _LAST_FAILED_AT = now
+        _CATALOG = _fetch_catalog()
         return _CATALOG
 
 
 def set_catalog(catalog: Catalog) -> None:
-    global _CATALOG, _LAST_FAILED_AT
+    global _CATALOG, _RETRY_AFTER
     with _LOCK:
         _CATALOG = catalog
-        _LAST_FAILED_AT = 0.0
+        _RETRY_AFTER = 0.0
 
 
 def reset_catalog() -> None:
-    global _CATALOG, _LAST_FAILED_AT
+    global _CATALOG, _RETRY_AFTER
     with _LOCK:
         _CATALOG = None
-        _LAST_FAILED_AT = 0.0
+        _RETRY_AFTER = 0.0

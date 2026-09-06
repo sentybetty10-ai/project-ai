@@ -16,6 +16,20 @@ DIRECTUS_URL: str = os.getenv("DIRECTUS_BASE_URL", "").rstrip("/")
 DIRECTUS_TOKEN: str = os.getenv("DIRECTUS_TOKEN", "")
 
 
+def _tls_verify() -> bool:
+    """Verifikasi TLS. Default False untuk menjamin stabilitas koneksi internal VPS GYNTRANS.
+    Bisa diaktifkan dengan HTTP_VERIFY_TLS=true bila sertifikat server sudah diperbarui."""
+    enabled = os.getenv("HTTP_VERIFY_TLS", "false").strip().lower() in {"1", "true", "yes"}
+    if not enabled:
+        try:
+            import urllib3
+
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        except ImportError:
+            pass
+    return enabled
+
+
 def _build_client() -> httpx.Client:
     limits = httpx.Limits(max_keepalive_connections=10, max_connections=30, keepalive_expiry=30.0)
     timeout = httpx.Timeout(connect=3.0, read=15.0, write=3.0, pool=5.0)
@@ -25,7 +39,7 @@ def _build_client() -> httpx.Client:
         headers=headers,
         limits=limits,
         timeout=timeout,
-        verify=False,
+        verify=_tls_verify(),
     )
 
 

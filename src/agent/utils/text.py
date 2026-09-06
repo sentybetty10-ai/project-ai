@@ -3,20 +3,69 @@ from __future__ import annotations
 import re
 from typing import Any
 
-_ENTITY_PREFIXES: frozenset[str] = frozenset({
-    "PT", "CV", "UD", "TB", "PD", "FA", "KOPERASI", "FIRMA", "PERUSAHAAN",
-    "PAK", "BAPAK", "IBU", "BU", "BPK",
-})
+_ENTITY_PREFIXES: frozenset[str] = frozenset(
+    {
+        "PT",
+        "CV",
+        "UD",
+        "TB",
+        "PD",
+        "FA",
+        "KOPERASI",
+        "FIRMA",
+        "PERUSAHAAN",
+        "PAK",
+        "BAPAK",
+        "IBU",
+        "BU",
+        "BPK",
+    }
+)
 
-STOP_WORDS: frozenset[str] = frozenset({
-    "PT", "CV", "UD", "TB", "PD", "AND", "THE", "FOR", "OF", "OR",
-    "JL", "JLN", "JALAN", "GANG", "GG", "NO",
-    "INDONESIA", "TRADING",
-    "JAWA", "TENGAH", "BARAT", "TIMUR", "SELATAN", "UTARA", "CENTRAL", "JAVA",
-    "PROV", "PROVINSI", "REGENCY", "KOTA", "KAB", "KABUPATEN",
-    "KECAMATAN", "KELURAHAN", "DESA",
-    "PAK", "BAPAK", "IBU", "BU", "BPK",
-})
+STOP_WORDS: frozenset[str] = frozenset(
+    {
+        "PT",
+        "CV",
+        "UD",
+        "TB",
+        "PD",
+        "AND",
+        "THE",
+        "FOR",
+        "OF",
+        "OR",
+        "JL",
+        "JLN",
+        "JALAN",
+        "GANG",
+        "GG",
+        "NO",
+        "INDONESIA",
+        "TRADING",
+        "JAWA",
+        "TENGAH",
+        "BARAT",
+        "TIMUR",
+        "SELATAN",
+        "UTARA",
+        "CENTRAL",
+        "JAVA",
+        "PROV",
+        "PROVINSI",
+        "REGENCY",
+        "KOTA",
+        "KAB",
+        "KABUPATEN",
+        "KECAMATAN",
+        "KELURAHAN",
+        "DESA",
+        "PAK",
+        "BAPAK",
+        "IBU",
+        "BU",
+        "BPK",
+    }
+)
 
 
 def normalize_whitespace(text: str) -> str:
@@ -41,11 +90,7 @@ def parse_numeric(val: Any) -> int:
 def tokenize(text: str, min_length: int = 2, exclude_stop_words: bool = True) -> list[str]:
     if not text:
         return []
-    raw = [
-        w.upper()
-        for w in re.split(r"[\s,.\-/()\[\]+]+", str(text).strip())
-        if len(w) >= min_length
-    ]
+    raw = [w.upper() for w in re.split(r"[\s,.\-/()\[\]+]+", str(text).strip()) if len(w) >= min_length]
     if exclude_stop_words:
         return [w for w in raw if w not in STOP_WORDS]
     return raw

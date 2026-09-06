@@ -36,25 +36,62 @@ LOCATIONS = [
 
 # Baris tarif palsu yang meniru bentuk index rates.
 RATE_ROWS = [
-    {"origin": "SMG", "destinasi": "TGR+BGR+BKS",
-     "customer_nama": "MAKMUR TECHNOLOGY I", "expedisi_nama": "", "truck_type": "CDD"},
-    {"origin": "JGJ", "destinasi": "SMG",
-     "customer_nama": "MAKMUR TECHNOLOGY I", "expedisi_nama": "", "truck_type": "CDD"},
-    {"origin": "TGR 2", "destinasi": "SMG",
-     "customer_nama": "EDS", "expedisi_nama": "RAPI JKT", "truck_type": "CDD BOX"},
-    {"origin": "SBY", "destinasi": "PKL",
-     "customer_nama": "EXCELLENCE QUALITIES YARN",
-     "expedisi_nama": "EXCELLENCE QUALITIES YARN", "truck_type": "WB"},
-    {"origin": "BTG", "destinasi": "SMG",
-     "customer_nama": "WAVIN TRADING INDONESIA", "expedisi_nama": "",
-     "truck_type": "TRONTON BAK"},
-    {"origin": "BTG", "destinasi": "SMG",
-     "customer_nama": "WAVIN TRADING INDONESIA", "expedisi_nama": "",
-     "truck_type": "TRONTON BOX"},
-    {"origin": "WNG", "destinasi": "JKT 2",
-     "customer_nama": "PT LIEBRA PERMANA", "expedisi_nama": "OOCL", "truck_type": "CDD"},
-    {"origin": "JKT+SMG 2", "destinasi": "SBY 3",
-     "customer_nama": "AST", "expedisi_nama": "", "truck_type": "WB"},
+    {
+        "origin": "SMG",
+        "destinasi": "TGR+BGR+BKS",
+        "customer_nama": "MAKMUR TECHNOLOGY I",
+        "expedisi_nama": "",
+        "truck_type": "CDD",
+    },
+    {
+        "origin": "JGJ",
+        "destinasi": "SMG",
+        "customer_nama": "MAKMUR TECHNOLOGY I",
+        "expedisi_nama": "",
+        "truck_type": "CDD",
+    },
+    {
+        "origin": "TGR 2",
+        "destinasi": "SMG",
+        "customer_nama": "EDS",
+        "expedisi_nama": "RAPI JKT",
+        "truck_type": "CDD BOX",
+    },
+    {
+        "origin": "SBY",
+        "destinasi": "PKL",
+        "customer_nama": "EXCELLENCE QUALITIES YARN",
+        "expedisi_nama": "EXCELLENCE QUALITIES YARN",
+        "truck_type": "WB",
+    },
+    {
+        "origin": "BTG",
+        "destinasi": "SMG",
+        "customer_nama": "WAVIN TRADING INDONESIA",
+        "expedisi_nama": "",
+        "truck_type": "TRONTON BAK",
+    },
+    {
+        "origin": "BTG",
+        "destinasi": "SMG",
+        "customer_nama": "WAVIN TRADING INDONESIA",
+        "expedisi_nama": "",
+        "truck_type": "TRONTON BOX",
+    },
+    {
+        "origin": "WNG",
+        "destinasi": "JKT 2",
+        "customer_nama": "PT LIEBRA PERMANA",
+        "expedisi_nama": "OOCL",
+        "truck_type": "CDD",
+    },
+    {
+        "origin": "JKT+SMG 2",
+        "destinasi": "SBY 3",
+        "customer_nama": "AST",
+        "expedisi_nama": "",
+        "truck_type": "WB",
+    },
 ]
 
 
@@ -71,7 +108,9 @@ def no_network(request, monkeypatch):
         return
 
     monkeypatch.setattr(
-        matcher_module.meili_service, "search", lambda *a, **k: SearchResult(),
+        matcher_module.meili_service,
+        "search",
+        lambda *a, **k: SearchResult(),
     )
     catalog_module.reset_catalog()
     yield
