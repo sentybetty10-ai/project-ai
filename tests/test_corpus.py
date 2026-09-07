@@ -13,7 +13,7 @@ import pytest
 import yaml
 
 CORPUS_PATH = Path(__file__).parent / "corpus" / "rates.yaml"
-_SLOT_KEYS = {"origin", "destinasi", "customer", "expedisi", "truck_type"}
+_SLOT_KEYS = {"origin", "destinasi", "customer", "expedisi", "type_mobil"}
 _STATUS_SAH = {"success", "not_found", "needs_clarification", "error"}
 
 
@@ -63,9 +63,9 @@ def test_korpus_live(case):
         ids = [str(r.get("id")) for r in out["rates"]]
         assert str(harap["row_id"]) in ids, f"{case_id}: dapat {ids}"
 
-    if "truck_type" in harap:
-        trucks = {str(r.get("truck_type", "")).upper() for r in out["rates"]}
-        assert harap["truck_type"].upper() in trucks, trucks
+    if "type_mobil" in harap:
+        trucks = {str(r.get("type_mobil", "")).upper() for r in out["rates"]}
+        assert harap["type_mobil"].upper() in trucks, trucks
 
     if "destinasi_mengandung" in harap:
         for row in out["rates"]:

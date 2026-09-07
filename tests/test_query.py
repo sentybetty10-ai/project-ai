@@ -18,7 +18,7 @@ def _hit(id_, origin, destinasi, truck="CDD", customer="PT X", expedisi="", stat
         "destinasi": destinasi,
         "customer_nama": customer,
         "expedisi_nama": expedisi,
-        "truck_type": truck,
+        "type_mobil": truck,
         "status": status,
     }
 

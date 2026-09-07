@@ -28,7 +28,14 @@ from src.agent.utils.text import (
 
 logger = logging.getLogger("gyntrans.domains.rates.catalog")
 
-_RATE_SCAN_FIELDS = ["origin", "destinasi", "customer_nama", "expedisi_nama", "truck_type", "status"]
+_RATE_SCAN_FIELDS = [
+    "origin",
+    "destinasi",
+    "customer_nama",
+    "expedisi_nama",
+    "type_mobil",
+    "status",
+]
 _LOCATION_FIELDS = ["alamat_tujuan", "alamat_lengkap"]
 _FAILED_RETRY_COOLDOWN = 30.0
 
@@ -206,7 +213,7 @@ def build_catalog(
         for name in (_up(row.get("customer_nama")), _up(row.get("expedisi_nama"))):
             if name:
                 partner_names.add(name)
-        truck = _up(row.get("truck_type"))
+        truck = _up(row.get("type_mobil"))
         if truck:
             truck_names.add(truck)
         for raw in (_up(row.get("origin")), _up(row.get("destinasi"))):

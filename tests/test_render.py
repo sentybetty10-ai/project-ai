@@ -6,8 +6,6 @@ dan nama mitra wajib persis dari database, bukan tulisan ulang LLM.
 
 from __future__ import annotations
 
-import dataclasses
-
 from src.agent.domains.rates import render as render_module
 from src.agent.domains.rates.types import PipelineResult
 
@@ -23,9 +21,9 @@ def _result() -> PipelineResult:
                 "id": 10164,
                 "origin": "SMG",
                 "destinasi": "SDA",
-                "customer": "PT KAYU BAGUS",
-                "expedisi": "PT KAYU BAGUS INTERNASIONAL",
-                "truck_type": "Flatbed Trailer",
+                "customer_nama": "PT KAYU BAGUS",
+                "expedisi_nama": "PT KAYU BAGUS INTERNASIONAL",
+                "type_mobil": "Flatbed Trailer",
                 "rate": 2400000,
                 "dp": 500000,
                 "uang_jalan": 1150000,
@@ -48,19 +46,23 @@ def test_formatted_memuat_data_persis():
     assert "Flatbed Trailer" in text
 
 
-def test_dp_uang_jalan_tampil_secara_default():
+def test_urutan_baris_formatted_presisi():
     text = render_module.format_result(_result())
-    assert "DP: Rp 500.000" in text
-    assert "Uang jalan: Rp 1.150.000" in text
+    expected_lines = [
+        "1. Rute: SMG ➔ SDA",
+        "   - Tipe Truk: Flatbed Trailer",
+        "   - Ekspedisi: PT KAYU BAGUS INTERNASIONAL",
+        "   - Customer: PT KAYU BAGUS",
+        "   - Rate: Rp 2.400.000",
+        "   - DP: Rp 500.000",
+        "   - Uang jalan: Rp 1.150.000",
+    ]
+    for line in expected_lines:
+        assert line in text
 
-
-def test_dp_uang_jalan_bisa_disembunyikan(monkeypatch):
-    cfg_baru = dataclasses.replace(render_module.cfg, include_dp_uang_jalan=False)
-    monkeypatch.setattr(render_module, "cfg", cfg_baru)
-    text = render_module.format_result(_result())
-    assert "DP:" not in text
-    assert "Uang jalan" not in text
-    assert "Rp 2.400.000" in text
+    # Pastikan urutan munculnya baris sesuai urutan
+    indices = [text.index(line) for line in expected_lines]
+    assert indices == sorted(indices)
 
 
 def test_status_non_success_tanpa_formatted():

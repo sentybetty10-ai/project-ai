@@ -80,8 +80,9 @@ def node_tools(state: AgentState) -> dict[str, Any]:
             data = _tool_payload(message)
         if not data:
             continue
-        updates["last_result"] = data
-        resolved = data.get("resolved")
+        data_clean = dict(data)
+        resolved = data_clean.pop("resolved", None)
+        updates["last_result"] = data_clean
         if isinstance(resolved, dict) and resolved:
             # Jika turn sebelumnya butuh klarifikasi, gabungkan slot untuk slot-filling.
             # Jika transaksi baru / sudah tuntas, gunakan resolved saat ini sebagai state bersih.

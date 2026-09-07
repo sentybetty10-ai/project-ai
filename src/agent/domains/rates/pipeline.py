@@ -61,15 +61,19 @@ def _resolve_partner_groups(
 def _format_rate(hit: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": hit.get("id"),
-        "origin": hit.get("origin", "-"),
-        "destinasi": hit.get("destinasi", "-"),
-        "customer": hit.get("customer_nama", "-"),
-        "expedisi": hit.get("expedisi_nama", "-"),
-        "truck_type": hit.get("truck_type", "-"),
+        "status": hit.get("status", ""),
         "rate": parse_numeric(hit.get("rate", 0)),
         "dp": parse_numeric(hit.get("dp", 0)),
         "uang_jalan": parse_numeric(hit.get("uang_jalan", 0)),
-        "status": hit.get("status", ""),
+        "expedisi_id": hit.get("expedisi_id"),
+        "expedisi_nama": hit.get("expedisi_nama", "-"),
+        "customer_id": hit.get("customer_id"),
+        "customer_nama": hit.get("customer_nama", "-"),
+        "destinasi_id": hit.get("destinasi_id"),
+        "origin": hit.get("origin", "-"),
+        "destinasi": hit.get("destinasi", "-"),
+        "type_mobil_id": hit.get("type_mobil_id"),
+        "type_mobil": hit.get("type_mobil", "-"),
     }
 
 
@@ -133,13 +137,13 @@ def run_rates_query(
     destinasi: str = "",
     customer: str = "",
     expedisi: str = "",
-    truck_type: str = "",
+    type_mobil: str = "",
 ) -> dict[str, Any]:
     origin = normalize_whitespace(origin)
     destinasi = normalize_whitespace(destinasi)
     customer = normalize_whitespace(customer)
     expedisi = normalize_whitespace(expedisi)
-    truck_type = normalize_whitespace(truck_type)
+    type_mobil = normalize_whitespace(type_mobil)
 
     catalog = get_catalog()
     if not catalog.ok:
@@ -177,7 +181,7 @@ def run_rates_query(
         if leftover_candidates[0] not in canonical_partners:
             canonical_partners.append(leftover_candidates[0])
 
-    trucks = resolve_truck(truck_type, catalog) if truck_type else []
+    trucks = resolve_truck(type_mobil, catalog) if type_mobil else []
     has_route = bool(origin_side) or bool(dest_side)
 
     # Rampingkan slot mitra untuk memori konteks LLM: gunakan representasi kanonik input.
@@ -187,7 +191,7 @@ def run_rates_query(
         "origin": list(origin_side.codes),
         "destinasi": list(dest_side.codes),
         "mitra": initial_mitra,
-        "truck_type": trucks,
+        "type_mobil": trucks,
     }
 
     if not partner_groups:
@@ -230,7 +234,7 @@ def run_rates_query(
         trucks=trucks,
     )
     if not outcome.hits:
-        result = _not_found(origin, destinasi, partner_groups, truck_type)
+        result = _not_found(origin, destinasi, partner_groups, type_mobil)
         result.resolved = resolved
         return _finalize(result)
 

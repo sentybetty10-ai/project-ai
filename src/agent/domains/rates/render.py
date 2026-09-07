@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.agent.domains.rates.types import PipelineResult, cfg
+from src.agent.domains.rates.types import PipelineResult
 
 
 def format_rupiah(value: int | float) -> str:
@@ -17,17 +17,15 @@ def format_rupiah(value: int | float) -> str:
 
 
 def _format_item(index: int, rate: dict[str, Any]) -> list[str]:
-    lines = [
+    return [
         f"{index}. Rute: {rate['origin']} ➔ {rate['destinasi']}",
-        f"   - Ekspedisi: {rate['expedisi']}",
-        f"   - Customer/Mitra: {rate['customer']}",
+        f"   - Tipe Truk: {rate['type_mobil']}",
+        f"   - Ekspedisi: {rate['expedisi_nama']}",
+        f"   - Customer: {rate['customer_nama']}",
         f"   - Rate: {format_rupiah(rate['rate'])}",
-        f"   - Tipe Truk: {rate['truck_type']}",
+        f"   - DP: {format_rupiah(rate['dp'])}",
+        f"   - Uang jalan: {format_rupiah(rate['uang_jalan'])}",
     ]
-    if cfg.include_dp_uang_jalan:
-        lines.append(f"   - DP: {format_rupiah(rate['dp'])}")
-        lines.append(f"   - Uang jalan: {format_rupiah(rate['uang_jalan'])}")
-    return lines
 
 
 def format_result(result: PipelineResult) -> str:

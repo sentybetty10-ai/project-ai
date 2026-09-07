@@ -15,8 +15,6 @@ class RatesConfig:
     search_limit: int = 60
     catalog_ttl_seconds: float = 900.0
     catalog_batch_size: int = 1000
-    # Satu-satunya saklar aturan tampil DP & Uang Jalan di blok formatted.
-    include_dp_uang_jalan: bool = True
 
 
 cfg = RatesConfig()

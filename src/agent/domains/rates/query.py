@@ -83,7 +83,7 @@ def build_steps(
     d = in_filter("destinasi", route_values(catalog, destinasi))
     o_any = in_filter("origin", route_values(catalog, origin, ignore_order=True))
     d_any = in_filter("destinasi", route_values(catalog, destinasi, ignore_order=True))
-    t = in_filter("truck_type", trucks)
+    t = in_filter("type_mobil", trucks)
 
     steps: list[QueryStep] = []
     seen: set[str] = set()
@@ -190,7 +190,8 @@ def sort_hits(
             points += 30
         if normalize_upper(hit.get("expedisi_nama")) in partner_set:
             points += 30
-        if normalize_upper(hit.get("truck_type")) in truck_set:
+        truck_name = normalize_upper(hit.get("type_mobil"))
+        if truck_name in truck_set:
             points += 20
         if str(hit.get("status") or "").lower() == "published":
             points += 5
@@ -198,7 +199,7 @@ def sort_hits(
             -points,
             ho,
             hd,
-            normalize_upper(hit.get("truck_type")),
+            truck_name,
             parse_numeric(hit.get("id")),
             str(hit.get("id") or ""),
         )

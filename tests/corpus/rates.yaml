@@ -5,8 +5,8 @@
 #
 #   id     penanda bebas, dipakai sebagai nama tes
 #   chat   kalimat asli user, untuk dokumentasi
-#   slots  argumen tools_rates: origin, destinasi, customer, expedisi, truck_type
-#   harap  yang wajib benar: status, needs, row_id, truck_type
+#   slots  argumen tools_rates: origin, destinasi, customer, expedisi, type_mobil
+#   harap  yang wajib benar: status, needs, row_id, type_mobil
 #
 # Jalankan dengan: uv run pytest -q -m live
 
@@ -118,7 +118,7 @@ cases:
       origin: "AICA"
       destinasi: "SEMARANG"
       expedisi: "AST"
-      truck_type: "CDD"
+      type_mobil: "CDD"
     harap:
       status: success
       destinasi_mengandung: "SMG"
@@ -129,11 +129,11 @@ cases:
       customer: "Wavin Trading Indonesia"
       origin: "Batang Regency, Central Java"
       destinasi: "Kota Semarang, Jawa Tengah"
-      truck_type: "Tronton Bak Terbuka"
+      type_mobil: "Tronton Bak Terbuka"
     harap:
       status: success
       row_id: 9074
-      truck_type: "TRONTON BAK"
+      type_mobil: "TRONTON BAK"
 
   - id: K-excellence-wing-box
     chat: "Armada Wing Box, Muat surabaya (pt.excellent), Tujuan Pekalongan, Expedisi Excellent"
@@ -141,11 +141,11 @@ cases:
       origin: "surabaya (pt.excellent)"
       destinasi: "Pekalongan"
       expedisi: "Excellent"
-      truck_type: "Wing Box"
+      type_mobil: "Wing Box"
     harap:
       status: success
       row_id: 10062
-      truck_type: "WB"
+      type_mobil: "WB"
 
   - id: K-nama-noise-diabaikan
     chat: "Expedisi Excellent, LLM salah mengambil Yuyun dari baris Note"
@@ -154,7 +154,7 @@ cases:
       destinasi: "Pekalongan"
       expedisi: "Excellent"
       customer: "Yuyun"
-      truck_type: "Wing Box"
+      type_mobil: "Wing Box"
     harap:
       status: success
       row_id: 10062
@@ -193,11 +193,11 @@ cases:
       origin: "TOI KARAWANG"
       destinasi: "SEMARANG"
       expedisi: "KUKDONG"
-      truck_type: "CDD BOX"
+      type_mobil: "CDD BOX"
     harap:
       status: success
       row_id: 5345
-      truck_type: "CDD BOX"
+      type_mobil: "CDD BOX"
 
   - id: P-att-tjpriok-solo
     chat: "Armada CDD, Muat TJ.PRIOK, Tujuan SOLO, Expedisi ATT"
@@ -205,11 +205,11 @@ cases:
       origin: "TJ.PRIOK"
       destinasi: "SOLO"
       expedisi: "ATT"
-      truck_type: "CDD"
+      type_mobil: "CDD"
     harap:
       status: success
       row_id: 7184
-      truck_type: "CDD BOX"
+      type_mobil: "CDD BOX"
 
   - id: Q-liebra-cddl-wonogiri-cakung
     chat: "PT LIBRA PERMANA, Type: CDDL, Rute: WONOGIRI - CAKUNG, Ket: berangkat to PT OOCL Logistics"
@@ -218,22 +218,22 @@ cases:
       origin: "WONOGIRI"
       destinasi: "CAKUNG"
       expedisi: "OOCL"
-      truck_type: "CDDL"
+      type_mobil: "CDDL"
     harap:
       status: success
       row_id: 7126
-      truck_type: "CDD LONG"
+      type_mobil: "CDD LONG"
 
   - id: R-kayubagus-flatbed-smg-sidoarjo
     chat: "Armada: FLatbed Trailer, Muat: Semarang ( PT.EASTWIND/CV.KAYU BAGUS ), Tujuan: Sidoarjo"
     slots:
       origin: "Semarang ( PT.EASTWIND/CV.KAYU BAGUS )"
       destinasi: "Sidoarjo"
-      truck_type: "FLatbed Trailer"
+      type_mobil: "FLatbed Trailer"
     harap:
       status: success
       row_id: 10164
-      truck_type: "Flatbed Trailer"
+      type_mobil: "Flatbed Trailer"
 
   - id: S-pungkook-widus-f1-wb
     chat: "Armada: wb, Muat: Grobokan ( PT.Pungkook ), Tujuan: Jakarta, Notes: Laporan masuk dr Ex : WIDUS/F1"
@@ -241,11 +241,11 @@ cases:
       origin: "Grobokan ( PT.Pungkook )"
       destinasi: "Jakarta"
       expedisi: "WIDUS/F1"
-      truck_type: "wb"
+      type_mobil: "wb"
     harap:
       status: success
       destinasi_mengandung: "JKT"
-      truck_type: "WB"
+      type_mobil: "WB"
 
   - id: T-wavin-logwin-marunda-tronton
     chat: "Armada : TRONTON, Asal Muat : Batang ( PT.Wavin ), Tujuan : Jakarta ( Marunda ), Notes : Laporan muat dari LOGWIN"
@@ -253,7 +253,7 @@ cases:
       origin: "Batang ( PT.Wavin )"
       destinasi: "Jakarta ( Marunda )"
       expedisi: "LOGWIN"
-      truck_type: "TRONTON"
+      type_mobil: "TRONTON"
     harap:
       status: success
       destinasi_mengandung: "JKT"
@@ -265,11 +265,11 @@ cases:
       customer: "PT OOCL Logistics"
       origin: "WONOGIRI"
       destinasi: "cakung"
-      truck_type: "CDDL"
+      type_mobil: "CDDL"
     harap:
       status: success
       row_id: 7126
-      truck_type: "CDD LONG"
+      type_mobil: "CDD LONG"
 
 
 

@@ -16,7 +16,7 @@ def tools_rates(
     destinasi: str = "",
     customer: str = "",
     expedisi: str = "",
-    truck_type: str = "",
+    type_mobil: str = "",
 ) -> tuple[dict, dict]:
     """Cek tarif masterdata RATES (ongkos D.O per rute, mitra, dan armada).
 
@@ -39,8 +39,8 @@ def tools_rates(
       Muat (misal: PT.EASTWIND/CV.KAYU BAGUS).
     - expedisi: nama dari baris Expedisi. Boleh tertukar dengan customer,
       backend yang mencocokkan.
-    - truck_type: baris Armada/Tipe Truk bila disebut, salin apa adanya
-      (FLatbed Trailer, Wing Box, CDD, CDDL, Tronton Bak Terbuka).
+    - type_mobil: baris Armada/Tipe Mobil bila disebut, salin apa adanya
+      (FLatbed Trailer, Wing Box, CDD, CDD BOX, CDDL, Tronton Bak Terbuka).
     - JANGAN memasukkan tanggal, jam, nomor HP/WA, PIC, driver, nopol, atau
       detail muatan (CBM, dimensi, jenis barang) ke slot mana pun.
 
@@ -49,15 +49,15 @@ def tools_rates(
         destinasi: Blok alamat bongkar/tujuan lengkap dari user.
         customer: Nama mitra/customer.
         expedisi: Nama ekspedisi.
-        truck_type: Tipe armada bila disebut.
+        type_mobil: Tipe mobil/armada bila disebut.
     """
     logger.info(
-        "tools_rates origin=%r destinasi=%r customer=%r expedisi=%r truck=%r",
+        "tools_rates origin=%r destinasi=%r customer=%r expedisi=%r type_mobil=%r",
         origin,
         destinasi,
         customer,
         expedisi,
-        truck_type,
+        type_mobil,
     )
     return split_tool_payload(
         run_rates_query(
@@ -65,6 +65,6 @@ def tools_rates(
             destinasi=destinasi,
             customer=customer,
             expedisi=expedisi,
-            truck_type=truck_type,
+            type_mobil=type_mobil,
         )
     )
