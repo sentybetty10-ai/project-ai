@@ -26,6 +26,14 @@ from src.agent.utils.text import (
     normalize_upper as _up,
 )
 
+try:
+    from rapidfuzz import fuzz as _fuzz
+    from rapidfuzz import process as _rf_process
+
+    _HAS_RAPIDFUZZ = True
+except ImportError:  # fallback aman jika belum terinstall
+    _HAS_RAPIDFUZZ = False
+
 logger = logging.getLogger("gyntrans.domains.rates.catalog")
 
 _RATE_SCAN_FIELDS = [
@@ -120,8 +128,27 @@ class LookupTable:
         probe = normalize_key(text)
         if not probe:
             return None
+        choices = self.values
+        if not choices:
+            return None
+
+        if _HAS_RAPIDFUZZ:
+            # Buat list normalized key untuk matching, simpan mapping ke canonical
+            norm_choices = [normalize_key(c) for c in choices]
+            result = _rf_process.extractOne(
+                probe,
+                norm_choices,
+                scorer=_fuzz.ratio,
+                score_cutoff=min_score * 100,
+            )
+            if result is None:
+                return None
+            _, score, idx = result
+            return (choices[idx], score / 100.0)
+
+        # Fallback tanpa rapidfuzz
         best: tuple[str, float] | None = None
-        for canonical in self.values:
+        for canonical in choices:
             score = ratio(probe, normalize_key(canonical))
             if score >= min_score and (best is None or score > best[1]):
                 best = (canonical, score)
@@ -131,8 +158,26 @@ class LookupTable:
         probe = consonant_skeleton(text)
         if len(probe) < 3:
             return None
+        skel_keys = self.skeleton_keys
+        if not skel_keys:
+            return None
+
+        if _HAS_RAPIDFUZZ:
+            result = _rf_process.extractOne(
+                probe,
+                skel_keys,
+                scorer=_fuzz.ratio,
+                score_cutoff=min_score * 100,
+            )
+            if result is None:
+                return None
+            _, score, idx = result
+            canonical = sorted(self._skeleton[skel_keys[idx]])[0]
+            return (canonical, score / 100.0)
+
+        # Fallback tanpa rapidfuzz
         best: tuple[str, float] | None = None
-        for skeleton in self.skeleton_keys:
+        for skeleton in skel_keys:
             score = ratio(probe, skeleton)
             if score >= min_score and (best is None or score > best[1]):
                 best = (sorted(self._skeleton[skeleton])[0], score)

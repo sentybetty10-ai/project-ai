@@ -148,6 +148,86 @@ def execute(
     return outcome
 
 
+async def execute_async(
+    catalog: Catalog,
+    *,
+    partner_groups: list[list[str]],
+    origin: RouteSide,
+    destinasi: RouteSide,
+    trucks: list[str],
+) -> QueryOutcome:
+    """Versi async: kirim semua QueryStep dalam 1 request multi-search ke Meilisearch.
+
+    Fallback ke serial jika multi-search gagal (mis: satu query mengandung filter invalid).
+    """
+    outcome = QueryOutcome()
+    steps = build_steps(
+        catalog,
+        partner_groups=partner_groups,
+        origin=origin,
+        destinasi=destinasi,
+        trucks=trucks,
+    )
+    if not steps:
+        return outcome
+
+    # Bangun daftar query untuk satu request multi-search
+    queries = [
+        {
+            "indexUid": cfg.index,
+            "filter": step.filter_expr,
+            "limit": cfg.search_limit,
+            "matchingStrategy": "last",
+        }
+        for step in steps
+    ]
+
+    try:
+        results = await meili_service.multi_search_async(queries)
+    except Exception as e:
+        logger.warning("multi-search gagal, fallback ke serial: %s", e)
+        results = []
+
+    # Jika multi-search berhasil dan hasilnya lengkap, pakai hasil batch
+    if results and len(results) == len(steps):
+        for step, result in zip(steps, results, strict=True):
+            outcome.steps_tried.append(step.name)
+            if result.hits:
+                outcome.hits = result.hits
+                outcome.estimated_total = result.estimated_total
+                outcome.step = step.name
+                logger.info(
+                    "rates [multi-search]: langkah %r menghasilkan %d baris",
+                    step.name, len(result.hits),
+                )
+                return outcome
+        logger.info(
+            "rates [multi-search]: semua langkah kosong (%s)",
+            ", ".join(outcome.steps_tried) or "tidak ada",
+        )
+        return outcome
+
+    # Fallback: jalankan satu per satu (serial) jika multi-search tidak menghasilkan data
+    logger.info("rates: fallback ke serial execute")
+    outcome = QueryOutcome()
+    for step in steps:
+        outcome.steps_tried.append(step.name)
+        result = await meili_service.search_async(
+            cfg.index,
+            filter_expr=step.filter_expr,
+            limit=cfg.search_limit,
+        )
+        if result.hits:
+            outcome.hits = result.hits
+            outcome.estimated_total = result.estimated_total
+            outcome.step = step.name
+            logger.info("rates [serial]: langkah %r menghasilkan %d baris", step.name, len(result.hits))
+            return outcome
+
+    logger.info("rates [serial]: semua langkah kosong (%s)", ", ".join(outcome.steps_tried) or "tidak ada")
+    return outcome
+
+
 def _match_cardinality(
     hits: list[dict[str, Any]],
     field_name: str,

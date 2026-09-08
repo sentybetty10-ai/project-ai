@@ -286,3 +286,161 @@ def run_rates_query(
             resolved=resolved,
         )
     )
+
+
+async def run_rates_query_async(
+    *,
+    origin: str = "",
+    destinasi: str = "",
+    customer: str = "",
+    expedisi: str = "",
+    type_mobil: str = "",
+) -> dict[str, Any]:
+    """Versi async dari run_rates_query — pakai execute_async (multi-search, 1 round-trip).
+
+    Semua langkah resolusi (catalog, matcher) tetap sync karena murni CPU/memory.
+    Hanya I/O ke Meilisearch yang async.
+    """
+    origin = normalize_whitespace(origin)
+    destinasi = normalize_whitespace(destinasi)
+    customer = normalize_whitespace(customer)
+    expedisi = normalize_whitespace(expedisi)
+    type_mobil = normalize_whitespace(type_mobil)
+
+    catalog = get_catalog()
+    if not catalog.ok:
+        return _finalize(
+            PipelineResult(
+                status="error",
+                message=(
+                    "Data master tarif sedang tidak bisa diakses, jadi pencarian belum "
+                    "bisa dijalankan. Ini gangguan di sisi sistem, bukan kesalahan penulisan."
+                ),
+            )
+        )
+
+    origin_side, origin_left = resolve_route_side(origin, catalog)
+    dest_side, dest_left = resolve_route_side(destinasi, catalog)
+
+    partner_groups, unresolved, canonical_partners = _resolve_partner_groups(
+        [s for s in (customer, expedisi) if s],
+        catalog,
+    )
+
+    leftover_candidates: list[str] = []
+    leftover_sources = origin_left if partner_groups else [*origin_left, *dest_left]
+    for leftover in leftover_sources:
+        found = resolve_partner(leftover, catalog)
+        if found:
+            for m in found:
+                if m.value not in leftover_candidates:
+                    leftover_candidates.append(m.value)
+    if leftover_candidates and not any(set(leftover_candidates) & set(g) for g in partner_groups):
+        partner_groups.append(leftover_candidates)
+        if leftover_candidates[0] not in canonical_partners:
+            canonical_partners.append(leftover_candidates[0])
+
+    trucks = resolve_truck(type_mobil, catalog) if type_mobil else []
+    has_route = bool(origin_side) or bool(dest_side)
+
+    initial_mitra = canonical_partners or list(dict.fromkeys(group[0] for group in partner_groups if group))
+
+    resolved: dict[str, Any] = {
+        "origin": list(origin_side.codes),
+        "destinasi": list(dest_side.codes),
+        "mitra": initial_mitra,
+        "type_mobil": trucks,
+    }
+
+    if not partner_groups:
+        if unresolved:
+            result = PipelineResult(
+                status="needs_clarification",
+                message=(
+                    f'Nama mitra "{unresolved[0]}" belum terdaftar di data kami. '
+                    "Mohon dicek penulisannya atau sebutkan nama lengkapnya."
+                ),
+                needs_clarification=["customer_atau_expedisi"],
+                resolved=resolved,
+            )
+            return _finalize(result)
+
+        pesan = (
+            "Rute sudah jelas, tapi mitranya belum disebut. Mohon sebutkan nama customer atau ekspedisinya."
+            if has_route
+            else "Mohon sebutkan nama mitra dan rutenya agar tarif bisa dicek."
+        )
+        return _finalize(
+            PipelineResult(
+                status="needs_clarification",
+                message=pesan,
+                needs_clarification=["customer_atau_expedisi"],
+                resolved=resolved,
+            )
+        )
+
+    if not has_route:
+        # Untuk _ask_route: gunakan execute sync karena ini query sederhana
+        result = _ask_route(catalog, partner_groups)
+        result.resolved = resolved
+        return _finalize(result)
+
+    # Query utama: pakai async + multi-search
+    outcome = await query_engine.execute_async(
+        catalog,
+        partner_groups=partner_groups,
+        origin=origin_side,
+        destinasi=dest_side,
+        trucks=trucks,
+    )
+    if not outcome.hits:
+        result = _not_found(origin, destinasi, partner_groups, type_mobil)
+        result.resolved = resolved
+        return _finalize(result)
+
+    partners_flat = [name for group in partner_groups for name in group]
+    ranked = query_engine.sort_hits(
+        outcome.hits,
+        origin=origin_side,
+        destinasi=dest_side,
+        origin_raw=origin,
+        destinasi_raw=destinasi,
+        partners=partners_flat,
+        trucks=trucks,
+    )
+    displayed = ranked[: cfg.max_display]
+    total = len(ranked)
+    remaining = max(0, total - len(displayed))
+
+    matched_partners: list[str] = []
+    for h in displayed:
+        for name in (h.get("customer_nama"), h.get("expedisi_nama")):
+            if name and any(name.upper() == p.upper() for p in partners_flat):
+                if name not in matched_partners:
+                    matched_partners.append(name)
+    if matched_partners:
+        resolved["mitra"] = matched_partners
+
+    if not resolved.get("origin"):
+        origin_hits = list(dict.fromkeys(h.get("origin") for h in displayed if h.get("origin")))
+        if origin_hits:
+            resolved["origin"] = origin_hits
+
+    if not resolved.get("destinasi"):
+        dest_hits = list(dict.fromkeys(h.get("destinasi") for h in displayed if h.get("destinasi")))
+        if dest_hits:
+            resolved["destinasi"] = dest_hits
+
+    return _finalize(
+        PipelineResult(
+            status="success",
+            message=_success_message(total, len(displayed), remaining),
+            total_found=total,
+            displayed_count=len(displayed),
+            has_more=remaining > 0,
+            remaining_count=remaining,
+            rates=[_format_rate(h) for h in displayed],
+            matched_step=outcome.step,
+            resolved=resolved,
+        )
+    )

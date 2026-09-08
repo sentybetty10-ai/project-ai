@@ -7,6 +7,7 @@ from typing import Any
 from langchain_core.messages import AIMessage, SystemMessage, trim_messages
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
+from langgraph.types import RetryPolicy
 
 from src.agent.model import SYSTEM_PROMPT, model
 from src.agent.state import AgentState
@@ -14,24 +15,48 @@ from src.agent.tools import ALL_TOOLS
 
 logger = logging.getLogger(__name__)
 
-_MAX_HISTORY = 20
+# Estimasi token maksimum yang boleh masuk ke konteks LLM.
+# Karakter ÷ 4 adalah pendekatan standar saat tidak ada tokenizer Gemini langsung.
+_MAX_TOKENS = 4000
 
 _tool_node = ToolNode(ALL_TOOLS)
 model_with_tools = model.bind_tools(ALL_TOOLS)
+
+# RetryPolicy untuk node — aktif hanya jika exception keluar dari node.
+# Default retry semua Exception kecuali ValueError/TypeError/SyntaxError.
+_retry = RetryPolicy(
+    max_attempts=3,
+    initial_interval=1.0,
+    backoff_factor=2.0,
+)
+
+
+def _count_tokens(messages: list) -> int:
+    """Estimasi token berdasarkan panjang karakter ÷ 4."""
+    total = 0
+    for m in messages:
+        content = getattr(m, "content", "") or ""
+        if isinstance(content, str):
+            total += max(1, len(content) // 4)
+        elif isinstance(content, list):
+            for c in content:
+                if isinstance(c, dict):
+                    total += max(1, len(str(c.get("text", ""))) // 4)
+    return total
 
 
 def _history(messages: list) -> list:
     return trim_messages(
         messages,
         strategy="last",
-        max_tokens=_MAX_HISTORY,
-        token_counter=len,
+        max_tokens=_MAX_TOKENS,
+        token_counter=_count_tokens,
         start_on="human",
         allow_partial=False,
     )
 
 
-def node_agent(state: AgentState) -> dict[str, Any]:
+async def node_agent(state: AgentState) -> dict[str, Any]:
     prompt = SYSTEM_PROMPT
     slots = state.get("slots")
     if slots:
@@ -46,38 +71,33 @@ def node_agent(state: AgentState) -> dict[str, Any]:
 
     messages = [SystemMessage(content=prompt)] + _history(state["messages"])
 
-    try:
-        response = model_with_tools.invoke(messages)
-    except Exception:
-        logger.exception("LLM invoke error")
-        response = AIMessage(
-            content="Maaf, sedang ada gangguan saat memproses permintaan. Silakan coba lagi."
-        )
+    # Lempar exception ke atas agar RetryPolicy aktif — JANGAN tangkap Exception umum di sini.
+    response = await model_with_tools.ainvoke(messages)
+
+    # Opsi B: LLM tetap jalan, tapi pastikan blok formatted tersalin.
+    # Jika formatted ada tapi tidak muncul di response, tambahkan di akhir.
+    last_result = state.get("last_result") or {}
+    formatted = last_result.get("formatted", "")
+    if formatted and isinstance(response.content, str):
+        # Cek keberadaan tanda khas blok formatted (huruf "Rp" atau "Rute:")
+        if "Rute:" not in response.content and "Rp" not in response.content:
+            logger.warning("LLM tidak menyalin blok formatted — ditambahkan ke respons")
+            new_content = (response.content.rstrip() + "\n\n" + formatted) if response.content else formatted
+            response = AIMessage(content=new_content, id=response.id)
 
     return {"messages": [response]}
 
 
-def _tool_payload(message: Any) -> dict[str, Any] | None:
-    content = getattr(message, "content", None)
-    if not isinstance(content, str) or not content:
-        return None
-    try:
-        data = json.loads(content)
-    except (ValueError, TypeError):
-        return None
-    return data if isinstance(data, dict) else None
-
-
-def node_tools(state: AgentState) -> dict[str, Any]:
-    result = _tool_node.invoke(state)
+async def node_tools(state: AgentState) -> dict[str, Any]:
+    result = await _tool_node.ainvoke(state)
     updates: dict[str, Any] = {"messages": result["messages"]}
 
     for message in result["messages"]:
         # content_and_artifact: JSON lengkap ada di artifact (hemat token);
-        # fallback baca content untuk tool lama tanpa artifact.
+        # fallback ke content untuk tool lama tanpa artifact.
         data = getattr(message, "artifact", None)
         if not isinstance(data, dict):
-            data = _tool_payload(message)
+            data = None
         if not data:
             continue
         data_clean = dict(data)
@@ -112,8 +132,8 @@ def build_graph(checkpointer=None):
     secara eksplisit, mis. build_graph(checkpointer=InMemorySaver()) atau
     PostgresSaver saat fase produksi nanti."""
     workflow = StateGraph(AgentState)
-    workflow.add_node("agent", node_agent)
-    workflow.add_node("tools", node_tools)
+    workflow.add_node("agent", node_agent, retry_policy=_retry)
+    workflow.add_node("tools", node_tools, retry_policy=_retry)
     workflow.add_edge(START, "agent")
     workflow.add_conditional_edges("agent", route_after_agent, ["tools", END])
     workflow.add_edge("tools", "agent")

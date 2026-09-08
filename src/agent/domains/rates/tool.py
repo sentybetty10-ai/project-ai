@@ -4,14 +4,14 @@ import logging
 
 from langchain_core.tools import tool
 
-from src.agent.domains.rates.pipeline import run_rates_query
+from src.agent.domains.rates.pipeline import run_rates_query_async
 from src.agent.domains.rates.types import TOOL_NAME, split_tool_payload
 
 logger = logging.getLogger("gyntrans.domains.rates")
 
 
 @tool(TOOL_NAME, response_format="content_and_artifact")
-def tools_rates(
+async def tools_rates(
     origin: str = "",
     destinasi: str = "",
     customer: str = "",
@@ -60,7 +60,7 @@ def tools_rates(
         type_mobil,
     )
     return split_tool_payload(
-        run_rates_query(
+        await run_rates_query_async(
             origin=origin,
             destinasi=destinasi,
             customer=customer,
