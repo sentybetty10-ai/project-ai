@@ -41,6 +41,12 @@ async def lifespan(app: Starlette):  # noqa: ARG001
     logger.info("Warm-up katalog dimulai di background")
     yield
     executor.shutdown(wait=False)
+    try:
+        from src.agent.services.meili import meili_service  # noqa: PLC0415
+
+        await meili_service.aclose()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Gagal menutup async client Meilisearch: %s", e)
 
 
 app = Starlette(lifespan=lifespan)

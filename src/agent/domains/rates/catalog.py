@@ -57,6 +57,7 @@ class LookupTable:
         self._prefix: dict[str, set[str]] = defaultdict(set)
         self._canonical: set[str] = set()
         self._canonical_sorted: list[str] | None = None
+        self._normalized_choices: list[str] | None = None
 
     def add(self, canonical: str, aliases: Iterable[str] = ()) -> None:
         canonical = _up(canonical)
@@ -64,6 +65,7 @@ class LookupTable:
             return
         self._canonical.add(canonical)
         self._canonical_sorted = None
+        self._normalized_choices = None
         self._cluster[normalize_key(canonical)].add(canonical)
         for alias in {canonical, *(_up(a) for a in aliases)}:
             if not alias:
@@ -89,7 +91,14 @@ class LookupTable:
     def values(self) -> list[str]:
         if self._canonical_sorted is None:
             self._canonical_sorted = sorted(self._canonical)
+            self._normalized_choices = [normalize_key(c) for c in self._canonical_sorted]
         return self._canonical_sorted
+
+    @property
+    def normalized_values(self) -> list[str]:
+        if self._normalized_choices is None:
+            _ = self.values
+        return self._normalized_choices or []
 
     @property
     def skeleton_keys(self) -> list[str]:
@@ -133,8 +142,7 @@ class LookupTable:
             return None
 
         if _HAS_RAPIDFUZZ:
-            # Buat list normalized key untuk matching, simpan mapping ke canonical
-            norm_choices = [normalize_key(c) for c in choices]
+            norm_choices = self.normalized_values
             result = _rf_process.extractOne(
                 probe,
                 norm_choices,

@@ -33,7 +33,7 @@ def format_result(result: PipelineResult) -> str:
     non-success agar LLM memakai field `message` sebagai gantinya."""
     if result.status != "success" or not result.rates:
         return ""
-    parts = [result.message, ""]
+    parts: list[str] = []
     for i, rate in enumerate(result.rates, 1):
         parts.extend(_format_item(i, rate))
         parts.append("")

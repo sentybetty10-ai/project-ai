@@ -17,6 +17,8 @@ if not GOOGLE_API_KEY:
 model = ChatGoogleGenerativeAI(
     model="gemini-3.5-flash-lite",
     google_api_key=GOOGLE_API_KEY,
+    timeout=30.0,
+    max_retries=2,
 )
 
 SYSTEM_PROMPT = """# PERSONA

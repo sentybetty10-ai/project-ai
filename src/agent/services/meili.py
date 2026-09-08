@@ -65,12 +65,43 @@ def _build_async_client() -> httpx.AsyncClient:
 class MeilisearchService:
     def __init__(self) -> None:
         self._client: httpx.Client | None = None
+        self._async_client: httpx.AsyncClient | None = None
+        self._async_client_loop: asyncio.AbstractEventLoop | None = None
 
     @property
     def client(self) -> httpx.Client:
         if self._client is None or self._client.is_closed:
             self._client = _build_client()
         return self._client
+
+    async def get_async_client(self) -> httpx.AsyncClient:
+        """Dapatkan AsyncClient dengan connection pool yang di-reuse.
+
+        Mendeteksi event loop aktif: jika loop berubah (misal di pytest)
+        atau client closed, buat instance baru yang terikat pada loop tersebut.
+        """
+        current_loop = asyncio.get_running_loop()
+        if (
+            self._async_client is None
+            or self._async_client.is_closed
+            or self._async_client_loop != current_loop
+            or self._async_client_loop.is_closed()
+        ):
+            if self._async_client and not self._async_client.is_closed:
+                try:
+                    await self._async_client.aclose()
+                except Exception:
+                    pass
+            self._async_client = _build_async_client()
+            self._async_client_loop = current_loop
+        return self._async_client
+
+    async def aclose(self) -> None:
+        """Tutup async client saat server shutdown."""
+        if self._async_client and not self._async_client.is_closed:
+            await self._async_client.aclose()
+            self._async_client = None
+            self._async_client_loop = None
 
     @property
     def configured(self) -> bool:
@@ -186,20 +217,15 @@ class MeilisearchService:
     # ──────────────────────────────────────────────────────
 
     async def _request_async(self, method: str, path: str, **kwargs: Any) -> httpx.Response | None:
-        """Buat AsyncClient baru per-call agar tidak ada konflik event loop.
-
-        Penggunaan context manager httpx.AsyncClient memastikan koneksi
-        ditutup dengan benar setelah setiap request. Connection pooling
-        dikelola secara internal oleh httpx per-instance.
-        """
+        """Eksekusi HTTP request async menggunakan client connection pool."""
         if not MEILI_URL:
             logger.warning("MEILISEARCH_URL belum dikonfigurasi")
             return None
 
         for attempt in range(2):
             try:
-                async with _build_async_client() as client:
-                    res = await client.request(method, path, **kwargs)
+                client = await self.get_async_client()
+                res = await client.request(method, path, **kwargs)
                 if res.status_code >= 400:
                     logger.error(
                         "Meilisearch [async] %s %s -> HTTP %s: %s",
@@ -214,6 +240,12 @@ class MeilisearchService:
                 logger.warning("Meilisearch [async] retry %d/2 (%s): %s", attempt + 1, path, e)
                 if attempt == 0:
                     await asyncio.sleep(0.3)
+                    if self._async_client:
+                        try:
+                            await self._async_client.aclose()
+                        except Exception:
+                            pass
+                        self._async_client = None
             except Exception as e:
                 logger.error("Meilisearch [async] error (%s): %s", path, e)
                 return None

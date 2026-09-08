@@ -4,7 +4,7 @@ import json
 import logging
 from typing import Any
 
-from langchain_core.messages import AIMessage, SystemMessage, trim_messages
+from langchain_core.messages import AIMessage, SystemMessage, ToolMessage, trim_messages
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.types import RetryPolicy
@@ -32,16 +32,25 @@ _retry = RetryPolicy(
 
 
 def _count_tokens(messages: list) -> int:
-    """Estimasi token berdasarkan panjang karakter ÷ 4."""
+    """Estimasi token berdasarkan panjang karakter ÷ 4, termasuk tool calls."""
     total = 0
     for m in messages:
         content = getattr(m, "content", "") or ""
+        msg_len = 0
         if isinstance(content, str):
-            total += max(1, len(content) // 4)
+            msg_len += len(content)
         elif isinstance(content, list):
             for c in content:
                 if isinstance(c, dict):
-                    total += max(1, len(str(c.get("text", ""))) // 4)
+                    msg_len += len(str(c.get("text", "")))
+        # Hitung tool calls / function call payload agar tidak under-count pesan tool caller
+        tool_calls = getattr(m, "tool_calls", None)
+        if tool_calls:
+            msg_len += len(str(tool_calls))
+        additional_kwargs = getattr(m, "additional_kwargs", None)
+        if additional_kwargs and "function_call" in additional_kwargs:
+            msg_len += len(str(additional_kwargs["function_call"]))
+        total += max(1, msg_len // 4)
     return total
 
 
@@ -74,16 +83,20 @@ async def node_agent(state: AgentState) -> dict[str, Any]:
     # Lempar exception ke atas agar RetryPolicy aktif — JANGAN tangkap Exception umum di sini.
     response = await model_with_tools.ainvoke(messages)
 
-    # Opsi B: LLM tetap jalan, tapi pastikan blok formatted tersalin.
-    # Jika formatted ada tapi tidak muncul di response, tambahkan di akhir.
-    last_result = state.get("last_result") or {}
-    formatted = last_result.get("formatted", "")
-    if formatted and isinstance(response.content, str):
-        # Cek keberadaan tanda khas blok formatted (huruf "Rp" atau "Rute:")
-        if "Rute:" not in response.content and "Rp" not in response.content:
-            logger.warning("LLM tidak menyalin blok formatted — ditambahkan ke respons")
-            new_content = (response.content.rstrip() + "\n\n" + formatted) if response.content else formatted
-            response = AIMessage(content=new_content, id=response.id)
+    # Verifikasi penyalinan blok formatted:
+    # Hanya aktif saat turn ini baru saja mengeksekusi tool (pesan sebelumnya adalah ToolMessage).
+    last_message = state["messages"][-1] if state.get("messages") else None
+    is_tool_response = getattr(last_message, "type", "") == "tool" or isinstance(last_message, ToolMessage)
+
+    if is_tool_response:
+        last_result = state.get("last_result") or {}
+        formatted = last_result.get("formatted", "")
+        if formatted and isinstance(response.content, str):
+            first_line = formatted.splitlines()[0].strip() if formatted.splitlines() else ""
+            if first_line and first_line not in response.content:
+                logger.warning("LLM tidak menyalin blok formatted — melengkapi blok ke respons")
+                new_content = (response.content.rstrip() + "\n\n" + formatted) if response.content else formatted
+                response = AIMessage(content=new_content, id=response.id)
 
     return {"messages": [response]}
 

@@ -70,7 +70,19 @@ Semua rekomendasi audit arsitektur Claude Opus 5 & arahan pengguna telah diimple
 ### H. Testing & Corpus Regression (`tests/test_corpus.py`)
 - Diperbarui dengan pengujian invarian bisnis dinamis (`origin_mengandung`, `destinasi_mengandung`, `mitra_mengandung`).
 - Menjalankan 2 set korpus: sync baseline dan async multi-search path.
-- **Hasil Uji:** 124/124 tests PASSED (100% pass), `ruff check` bersih (0 lint errors).
+- **Hasil Uji:** 124/124 tests PASSED (100% pass), `ruff check` bersih (0 lint errors), durasi turun ke ~3.98 detik.
+
+### I. PENYEMPURNAAN 7 POIN PASCA-AUDIT TRACE (SELESAI 100%)
+1. **Zero Blocking I/O (`pipeline.py`):** Resolusi entitas (matcher sync & CPU fuzzy) dibungkus `asyncio.to_thread` sehingga event loop server 100% bebas hambatan saat memproses kata alamat baru.
+2. **Koneksi HTTP Reuse (`meili.py` & `lifespan.py`):** `_async_client` kini di-reuse dengan deteksi event loop aktif (`Limits(max_connections=50)` aktif optimal, tanpa TLS handshake berulang), dan ditutup rapi via `meili_service.aclose()` di shutdown lifespan.
+3. **Unifikasi Pipeline DRY (`pipeline.py`):** `run_rates_query_async` menjadi single source of truth; duplikasi 150 baris kode dihapus. `run_rates_query` menjadi sync wrapper tipis.
+4. **Presisi Hitung Token (`graph.py`):** `_count_tokens` menghitung payload `tool_calls` dan `function_call` sehingga `trim_messages` tidak under-count pesan pemanggilan tool.
+5. **Determinisme LLM (`model.py`):** Ditetapkan `temperature=0.0`, `timeout=30.0`, dan `max_retries=2` pada `ChatGoogleGenerativeAI`.
+6. **Pagar Kebocoran Mitra (`pipeline.py`):** Jika `partner_groups` sudah terisi dari slot `customer`/`expedisi`, sistem TIDAK menyapu sisa kata alamat (`origin_left` maupun `dest_left`), mencegah masuknya nama mitra kedua yang merusak pencarian eksak.
+7. **Cache Normalisasi Kamus (`catalog.py`):** `normalized_values` di-cache di `LookupTable` dan di-invalidate otomatis saat ada penambahan data (`add`), memangkas loop list comprehension pada setiap panggilan `nearest()`.
+8. **Pembersihan `formatted` dari Kalimat Dobel (`render.py`):** `result.message` dikeluarkan dari `format_result` sehingga `formatted` murni hanya memuat daftar blok tarif. Mencegah sapaan dobel dengan kalimat pengantar LLM.
+9. **Eliminasi Hack Opsi B yang Rapuh (`graph.py`):** Mengganti pengecekan substring `"Rp"`/`"Rute:"` dengan guard berbasis `is_tool_response` (hanya aktif setelah `ToolMessage`) dan pengecekan baris pertama tabel (`first_line not in response.content`), sehingga giliran chat biasa ("terima kasih", dll.) tidak pernah ketempelan tabel tarif lama.
+10. **Pembersihan Warning Gemini 3.x (`model.py`):** Menghapus parameter `temperature=0.0` sesuai pedoman resmi Google AI untuk arsitektur Gemini 3.x (*fixed sampling defaults*), menjadikan log terminal 100% bersih tanpa warning.
 
 ---
 
