@@ -84,6 +84,21 @@ Semua rekomendasi audit arsitektur Claude Opus 5 & arahan pengguna telah diimple
 9. **Eliminasi Hack Opsi B yang Rapuh (`graph.py`):** Mengganti pengecekan substring `"Rp"`/`"Rute:"` dengan guard berbasis `is_tool_response` (hanya aktif setelah `ToolMessage`) dan pengecekan baris pertama tabel (`first_line not in response.content`), sehingga giliran chat biasa ("terima kasih", dll.) tidak pernah ketempelan tabel tarif lama.
 10. **Pembersihan Warning Gemini 3.x (`model.py`):** Menghapus parameter `temperature=0.0` sesuai pedoman resmi Google AI untuk arsitektur Gemini 3.x (*fixed sampling defaults*), menjadikan log terminal 100% bersih tanpa warning.
 
+### J. PEMBERSIHAN DUPLIKASI & PEMUSATAN FORMATTER (SELESAI 100%)
+1. **Eliminasi Jalur Sinkron:**
+   - Dead code `execute()` serial di `src/agent/domains/rates/query.py` dihapus total (35 baris).
+   - Sync wrapper `run_rates_query` di `src/agent/domains/rates/pipeline.py` dihapus total (30 baris), menghilangkan risiko threadpool executor dan loop nesting.
+   - Test runner korpus di `tests/test_corpus.py` disatukan menjadi pengujian async murni (`async def test_korpus_live`).
+2. **Pemusatan Formatter Data Tarif (`render.py`):**
+   - Fungsi normalisasi hit Meilisearch `format_rate_hit` dipindahkan dari `pipeline.py` ke `src/agent/domains/rates/render.py` sebagai *single source of truth* representasi data tarif.
+   - `render.py` kini mengelola siklus lengkap format tarif: normalisasi dict (`format_rate_hit`), pemformatan baris per item (`_format_item`), rendering blok final (`format_result`), dan rupiah (`format_rupiah`).
+3. **Observabilitas Strategi Matching (`catalog.py` & `matcher.py`):**
+   - Menambahkan logging debug terstruktur pada `LookupTable` (`by_skeleton`, `prefix_candidates`, `nearest`, `nearest_skeleton`) dan pada resolusi entitas `matcher` (`resolve_city`, `resolve_partner`, `resolve_truck`).
+   - Memberikan visibilitas nyata untuk evaluasi pemangkasan tangga relaksasi dan struktur kamus yang tidak pernah aktif di produksi.
+4. **Hasil Pengujian Terkini:**
+   - `uv run ruff check src/ tests/`: **All checks passed (0 lint issues)**.
+   - `uv run pytest tests/ -v`: **101/101 tests PASSED dalam 2.27 detik** (durasi pengujian terpangkas dari sebelumnya 7+ detik).
+
 ---
 
 ## 4. PANDUAN PENGEMBANGAN SELANJUTNYA
@@ -96,3 +111,4 @@ Semua rekomendasi audit arsitektur Claude Opus 5 & arahan pengguna telah diimple
    Jika ada penambahan rute/mitra baru di DB Directus, katalog akan diperbarui otomatis sesuai interval TTL (default 300 detik) atau saat restart lifespan.
 3. **Penyusunan Fitur Baru:**
    Ikuti metodologi KISS, pastikan setiap tool baru mendukung async native, dan catat keputusan baru ke berkas ini.
+

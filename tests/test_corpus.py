@@ -48,13 +48,15 @@ def test_korpus_valid():
         assert harap.get("status") in _STATUS_SAH, f"{case_id}: status harap tidak sah"
 
 
+@pytest.mark.asyncio
 @pytest.mark.live
 @pytest.mark.skipif(not os.getenv("MEILISEARCH_URL"), reason="butuh koneksi Meilisearch")
 @pytest.mark.parametrize("case", CASES, ids=[c["id"] for c in CASES])
-def test_korpus_live(case):
-    from src.agent.domains.rates.pipeline import run_rates_query
+async def test_korpus_live(case):
+    """Uji corpus via jalur async multi-search (single source of truth)."""
+    from src.agent.domains.rates.pipeline import run_rates_query_async
 
-    out = run_rates_query(**(case.get("slots") or {}))
+    out = await run_rates_query_async(**(case.get("slots") or {}))
     harap = case.get("harap") or {}
     case_id = case["id"]
 
@@ -63,12 +65,10 @@ def test_korpus_live(case):
     if "needs" in harap:
         assert harap["needs"] in out["needs_clarification"], out["needs_clarification"]
 
-    # row_id: backward-compat assertion
     if "row_id" in harap:
         ids = [str(r.get("id")) for r in out["rates"]]
         assert str(harap["row_id"]) in ids, f"{case_id}: dapat {ids}"
 
-    # Invarian bisnis: lebih tahan terhadap perubahan data DB
     if "type_mobil" in harap:
         trucks = {str(r.get("type_mobil", "")).upper() for r in out["rates"]}
         assert harap["type_mobil"].upper() in trucks, trucks
@@ -92,46 +92,3 @@ def test_korpus_live(case):
         )
         assert mitra_match, f"{case_id}: tidak ada mitra yang mengandung '{keyword}'"
 
-
-@pytest.mark.asyncio
-@pytest.mark.live
-@pytest.mark.skipif(not os.getenv("MEILISEARCH_URL"), reason="butuh koneksi Meilisearch")
-@pytest.mark.parametrize("case", CASES, ids=[c["id"] for c in CASES])
-async def test_korpus_live_async(case):
-    """Uji corpus via jalur async (multi-search) — hasilnya harus identik dengan sync."""
-    from src.agent.domains.rates.pipeline import run_rates_query_async
-
-    out = await run_rates_query_async(**(case.get("slots") or {}))
-    harap = case.get("harap") or {}
-    case_id = case["id"]
-
-    assert out["status"] == harap["status"], f"{case_id} [async]: {out['message']}"
-
-    if "needs" in harap:
-        assert harap["needs"] in out["needs_clarification"], out["needs_clarification"]
-
-    if "row_id" in harap:
-        ids = [str(r.get("id")) for r in out["rates"]]
-        assert str(harap["row_id"]) in ids, f"{case_id} [async]: dapat {ids}"
-
-    if "type_mobil" in harap:
-        trucks = {str(r.get("type_mobil", "")).upper() for r in out["rates"]}
-        assert harap["type_mobil"].upper() in trucks, trucks
-
-    if "destinasi_mengandung" in harap:
-        for row in out["rates"]:
-            assert harap["destinasi_mengandung"] in str(row["destinasi"]).upper(), \
-                f"{case_id} [async]: destinasi {row['destinasi']!r} tidak mengandung {harap['destinasi_mengandung']!r}"
-
-    if "origin_mengandung" in harap:
-        for row in out["rates"]:
-            assert harap["origin_mengandung"] in str(row["origin"]).upper()
-
-    if "mitra_mengandung" in harap:
-        keyword = harap["mitra_mengandung"].upper()
-        mitra_match = any(
-            keyword in str(r.get("customer_nama", "")).upper()
-            or keyword in str(r.get("expedisi_nama", "")).upper()
-            for r in out["rates"]
-        )
-        assert mitra_match, f"{case_id} [async]: tidak ada mitra yang mengandung '{keyword}'"

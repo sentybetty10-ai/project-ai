@@ -49,7 +49,8 @@ _FAILED_RETRY_COOLDOWN = 30.0
 
 
 class LookupTable:
-    def __init__(self) -> None:
+    def __init__(self, name: str = "default") -> None:
+        self.name = name
         self._exact: dict[str, str] = {}
         self._cluster: dict[str, set[str]] = defaultdict(set)
         self._skeleton: dict[str, list[str]] = defaultdict(list)
@@ -124,14 +125,20 @@ class LookupTable:
         skeleton = consonant_skeleton(text)
         if len(skeleton) < 3:
             return []
-        return sorted(self._skeleton.get(skeleton, []))
+        found = sorted(self._skeleton.get(skeleton, []))
+        if found:
+            logger.debug("LookupTable[%s].by_skeleton: %r -> %r", self.name, text, found)
+        return found
 
     def prefix_candidates(self, text: str) -> list[str]:
         found: set[str] = set()
         for token in tokenize(text, exclude_stop_words=False):
             if len(token) >= 3:
                 found |= self._prefix.get(token[:3], set())
-        return sorted(found)
+        res = sorted(found)
+        if res:
+            logger.debug("LookupTable[%s].prefix_candidates: %r -> %d kandidat", self.name, text, len(res))
+        return res
 
     def nearest(self, text: str, min_score: float) -> tuple[str, float] | None:
         probe = normalize_key(text)
@@ -151,8 +158,12 @@ class LookupTable:
             )
             if result is None:
                 return None
-            _, score, idx = result
-            return (choices[idx], score / 100.0)
+            _, score_int, idx = result
+            match_res = (choices[idx], score_int / 100.0)
+            logger.debug(
+                "LookupTable[%s].nearest: %r -> %r (skor=%.2f)", self.name, text, match_res[0], match_res[1]
+            )
+            return match_res
 
         # Fallback tanpa rapidfuzz
         best: tuple[str, float] | None = None
@@ -160,6 +171,8 @@ class LookupTable:
             score = ratio(probe, normalize_key(canonical))
             if score >= min_score and (best is None or score > best[1]):
                 best = (canonical, score)
+        if best:
+            logger.debug("LookupTable[%s].nearest: %r -> %r (skor=%.2f)", self.name, text, best[0], best[1])
         return best
 
     def nearest_skeleton(self, text: str, min_score: float) -> tuple[str, float] | None:
@@ -179,9 +192,17 @@ class LookupTable:
             )
             if result is None:
                 return None
-            _, score, idx = result
+            _, score_int, idx = result
             canonical = sorted(self._skeleton[skel_keys[idx]])[0]
-            return (canonical, score / 100.0)
+            match_res = (canonical, score_int / 100.0)
+            logger.debug(
+                "LookupTable[%s].nearest_skeleton: %r -> %r (skor=%.2f)",
+                self.name,
+                text,
+                match_res[0],
+                match_res[1],
+            )
+            return match_res
 
         # Fallback tanpa rapidfuzz
         best: tuple[str, float] | None = None
@@ -189,15 +210,19 @@ class LookupTable:
             score = ratio(probe, skeleton)
             if score >= min_score and (best is None or score > best[1]):
                 best = (sorted(self._skeleton[skeleton])[0], score)
+        if best:
+            logger.debug(
+                "LookupTable[%s].nearest_skeleton: %r -> %r (skor=%.2f)", self.name, text, best[0], best[1]
+            )
         return best
 
 
 @dataclass
 class Catalog:
-    cities: LookupTable = field(default_factory=LookupTable)
+    cities: LookupTable = field(default_factory=lambda: LookupTable("cities"))
     city_codes: set[str] = field(default_factory=set)
-    partners: LookupTable = field(default_factory=LookupTable)
-    trucks: LookupTable = field(default_factory=LookupTable)
+    partners: LookupTable = field(default_factory=lambda: LookupTable("partners"))
+    trucks: LookupTable = field(default_factory=lambda: LookupTable("trucks"))
     route_index: dict[str, list[str]] = field(default_factory=dict)
     route_index_sorted: dict[str, list[str]] = field(default_factory=dict)
     unparsed_routes: list[str] = field(default_factory=list)

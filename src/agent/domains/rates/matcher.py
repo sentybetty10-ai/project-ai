@@ -125,7 +125,9 @@ def resolve_city(
     code = normalize_code(f"{match.value} {number}") if number else match.value
     if code not in cat.city_codes:
         return None
-    return EntityMatch(value=code, strategy=match.strategy, score=match.score)
+    res = EntityMatch(value=code, strategy=match.strategy, score=match.score)
+    logger.debug("matcher.city: %r -> %s via %s (skor=%.2f)", segment, res.value, res.strategy, res.score)
+    return res
 
 
 def resolve_route_side(text: str, catalog: Catalog | None = None) -> tuple[RouteSide, list[str]]:
@@ -227,6 +229,7 @@ def resolve_partner(text: str, catalog: Catalog | None = None) -> list[EntityMat
 
     cluster = cat.partners.cluster(probe)
     if cluster:
+        logger.debug("matcher.partner: %r -> eksak cluster (%d nama)", text, len(cluster))
         return [EntityMatch(name, "mitra_eksak", 1.0) for name in cluster]
 
     pool = cat.partners.prefix_candidates(probe) or cat.partners.values
@@ -250,6 +253,13 @@ def resolve_partner(text: str, catalog: Catalog | None = None) -> list[EntityMat
                     candidates.append(EntityMatch(variant, "mitra_kemiripan", score))
         if len(candidates) >= cfg.max_candidates:
             break
+    if candidates:
+        logger.debug(
+            "matcher.partner: %r -> %d kandidat via kemiripan (top_skor=%.2f)",
+            text,
+            len(candidates),
+            top,
+        )
     return candidates
 
 
@@ -281,4 +291,7 @@ def resolve_truck(text: str, catalog: Catalog | None = None) -> list[str]:
         return sorted(superset)[: cfg.max_candidates]
 
     found = cat.trucks.nearest(probe, _TRUCK_MIN) or cat.trucks.nearest_skeleton(probe, _TRUCK_MIN)
-    return [found[0]] if found else []
+    res = [found[0]] if found else []
+    if res:
+        logger.debug("matcher.truck: %r -> %r", text, res)
+    return res

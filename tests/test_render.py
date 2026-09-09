@@ -68,3 +68,25 @@ def test_urutan_baris_formatted_presisi():
 def test_status_non_success_tanpa_formatted():
     result = PipelineResult(status="not_found", message="Tidak ada data.")
     assert render_module.format_result(result) == ""
+
+
+def test_format_rate_hit():
+    raw_hit = {
+        "id": "123",
+        "status": "published",
+        "rate": "2500000",
+        "dp": "500000",
+        "uang_jalan": "1000000",
+        "expedisi_nama": "PT GYNTRANS",
+        "origin": "JKT",
+        "destinasi": "SUB",
+    }
+    normalized = render_module.format_rate_hit(raw_hit)
+    assert normalized["id"] == "123"
+    assert normalized["rate"] == 2500000
+    assert normalized["dp"] == 500000
+    assert normalized["uang_jalan"] == 1000000
+    assert normalized["expedisi_nama"] == "PT GYNTRANS"
+    assert normalized["customer_nama"] == "-"
+    assert normalized["type_mobil"] == "-"
+

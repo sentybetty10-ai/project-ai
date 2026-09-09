@@ -13,9 +13,9 @@ from src.agent.domains.rates.matcher import (
     resolve_route_side,
     resolve_truck,
 )
-from src.agent.domains.rates.render import format_result
+from src.agent.domains.rates.render import format_rate_hit, format_result
 from src.agent.domains.rates.types import PipelineResult, cfg
-from src.agent.utils.text import normalize_upper, normalize_whitespace, parse_numeric
+from src.agent.utils.text import normalize_upper, normalize_whitespace
 
 logger = logging.getLogger("gyntrans.domains.rates.pipeline")
 
@@ -58,24 +58,6 @@ def _resolve_partner_groups(
 
     return groups, unresolved, canonicals
 
-
-def _format_rate(hit: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "id": hit.get("id"),
-        "status": hit.get("status", ""),
-        "rate": parse_numeric(hit.get("rate", 0)),
-        "dp": parse_numeric(hit.get("dp", 0)),
-        "uang_jalan": parse_numeric(hit.get("uang_jalan", 0)),
-        "expedisi_id": hit.get("expedisi_id"),
-        "expedisi_nama": hit.get("expedisi_nama", "-"),
-        "customer_id": hit.get("customer_id"),
-        "customer_nama": hit.get("customer_nama", "-"),
-        "destinasi_id": hit.get("destinasi_id"),
-        "origin": hit.get("origin", "-"),
-        "destinasi": hit.get("destinasi", "-"),
-        "type_mobil_id": hit.get("type_mobil_id"),
-        "type_mobil": hit.get("type_mobil", "-"),
-    }
 
 
 def _success_message(total: int, displayed: int, remaining: int) -> str:
@@ -317,38 +299,9 @@ async def run_rates_query_async(
             displayed_count=len(displayed),
             has_more=remaining > 0,
             remaining_count=remaining,
-            rates=[_format_rate(h) for h in displayed],
+            rates=[format_rate_hit(h) for h in displayed],
             matched_step=outcome.step,
             resolved=resolved,
         )
     )
 
-
-def run_rates_query(
-    *,
-    origin: str = "",
-    destinasi: str = "",
-    customer: str = "",
-    expedisi: str = "",
-    type_mobil: str = "",
-) -> dict[str, Any]:
-    """Sync runner untuk backward compatibility dan test runner."""
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
-
-    coro = run_rates_query_async(
-        origin=origin,
-        destinasi=destinasi,
-        customer=customer,
-        expedisi=expedisi,
-        type_mobil=type_mobil,
-    )
-
-    if loop and loop.is_running():
-        import concurrent.futures
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-            return ex.submit(asyncio.run, coro).result()
-    return asyncio.run(coro)

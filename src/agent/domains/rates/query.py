@@ -114,40 +114,6 @@ def build_steps(
     return steps
 
 
-def execute(
-    catalog: Catalog,
-    *,
-    partner_groups: list[list[str]],
-    origin: RouteSide,
-    destinasi: RouteSide,
-    trucks: list[str],
-) -> QueryOutcome:
-    outcome = QueryOutcome()
-    steps = build_steps(
-        catalog,
-        partner_groups=partner_groups,
-        origin=origin,
-        destinasi=destinasi,
-        trucks=trucks,
-    )
-    for step in steps:
-        outcome.steps_tried.append(step.name)
-        result = meili_service.search(
-            cfg.index,
-            filter_expr=step.filter_expr,
-            limit=cfg.search_limit,
-        )
-        if result.hits:
-            outcome.hits = result.hits
-            outcome.estimated_total = result.estimated_total
-            outcome.step = step.name
-            logger.info("rates: langkah %r menghasilkan %d baris", step.name, len(result.hits))
-            return outcome
-
-    logger.info("rates: semua langkah kosong (%s)", ", ".join(outcome.steps_tried) or "tidak ada")
-    return outcome
-
-
 async def execute_async(
     catalog: Catalog,
     *,
@@ -198,7 +164,8 @@ async def execute_async(
                 outcome.step = step.name
                 logger.info(
                     "rates [multi-search]: langkah %r menghasilkan %d baris",
-                    step.name, len(result.hits),
+                    step.name,
+                    len(result.hits),
                 )
                 return outcome
         logger.info(
